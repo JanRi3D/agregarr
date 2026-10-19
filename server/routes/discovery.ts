@@ -1,6 +1,7 @@
 import PlexAPI from '@server/api/plexapi';
 import { getAdminUser } from '@server/lib/collections/core/CollectionUtilities';
 import { discoveryService } from '@server/lib/collections/services/DiscoveryService';
+import { getMediaServerClient, isJellyfinMode } from '@server/lib/mediaServer';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
 import { Router } from 'express';
@@ -11,6 +12,10 @@ const discoveryRoutes = Router();
  * Initialize Plex client with admin credentials
  */
 async function getPlexClient(): Promise<PlexAPI> {
+  if (isJellyfinMode()) {
+    return getMediaServerClient();
+  }
+
   const admin = await getAdminUser();
   if (!admin?.plexToken) {
     logger.error('No admin Plex token found for connection', {

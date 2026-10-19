@@ -493,30 +493,30 @@ class CollectionsSync {
 
       const duration = Date.now() - startTime;
 
-      // Hub discovery and home order randomization are Plex-only
-      if (!jellyfinMode) {
-        // Run discovery to refresh missing warnings
-        this.setStage('Refreshing collection status...');
-        try {
-          const { discoveryService } = await import(
-            '@server/lib/collections/services/DiscoveryService'
-          );
-          await discoveryService.discoverAllHubs(
-            plexClient,
-            true, // Update settings with any new discoveries to keep everything in sync
-            true // Skip sync check since we're already in sync
-          );
-          logger.info('Collection status refreshed successfully', {
-            label: 'Collections Sync',
-          });
-        } catch (error) {
-          logger.warn('Failed to refresh collection status after sync', {
-            label: 'Collections Sync',
-            error: error instanceof Error ? error.message : String(error),
-          });
-          // Don't fail the sync if discovery fails
-        }
+      // Run discovery to refresh missing warnings
+      this.setStage('Refreshing collection status...');
+      try {
+        const { discoveryService } = await import(
+          '@server/lib/collections/services/DiscoveryService'
+        );
+        await discoveryService.discoverAllHubs(
+          plexClient,
+          true, // Update settings with any new discoveries to keep everything in sync
+          true // Skip sync check since we're already in sync
+        );
+        logger.info('Collection status refreshed successfully', {
+          label: 'Collections Sync',
+        });
+      } catch (error) {
+        logger.warn('Failed to refresh collection status after sync', {
+          label: 'Collections Sync',
+          error: error instanceof Error ? error.message : String(error),
+        });
+        // Don't fail the sync if discovery fails
+      }
 
+      // Home order randomization is Plex-only
+      if (!jellyfinMode) {
         // Randomize home order for collections with randomizeHomeOrder enabled
         try {
           this.setStage('Randomizing home order...');

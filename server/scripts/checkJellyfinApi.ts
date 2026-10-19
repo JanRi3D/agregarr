@@ -137,6 +137,9 @@ const routes: Partial<Record<string, (call: Call) => unknown>> = {
         TotalRecordCount: 1,
       };
     }
+    if (query.get('ParentId') === 'col-pre') {
+      return { Items: [{ Id: 'jf-matrix', Name: 'The Matrix' }] };
+    }
     if (query.get('ParentId') === 'show-1') {
       return {
         Items: [
@@ -565,6 +568,19 @@ const main = async () => {
       ?.query.get('EnableImageTypes'),
     'Primary'
   );
+
+  // Pre-existing collections are shown under the library of their items;
+  // collections the caller excludes are left alone
+  const [preExisting, managed] = await jellyfin.assignLibraries(
+    [{ ratingKey: 'col-pre' }, { ratingKey: 'col-1' }],
+    (collection) => collection.ratingKey === 'col-pre'
+  );
+  assert.deepStrictEqual(preExisting, {
+    ratingKey: 'col-pre',
+    libraryKey: 'lib-movies',
+    libraryName: 'Movies',
+  });
+  assert.deepStrictEqual(managed, { ratingKey: 'col-1' });
 
   // Missing collections resolve to null instead of throwing
   assert.strictEqual(await jellyfin.getCollectionMetadata('gone'), null);

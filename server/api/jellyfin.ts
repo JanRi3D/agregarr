@@ -569,6 +569,52 @@ class JellyfinAPI implements PlexCompatible {
     }
   }
 
+  /**
+   * BoxSets aren't in a library. Give each collection that shouldAssign
+   * accepts the library most of its items come from; collections without
+   * items in a library stay unassigned.
+   */
+  public async assignLibraries<
+    T extends { ratingKey: string; libraryKey?: string; libraryName?: string }
+  >(collections: T[], shouldAssign: (collection: T) => boolean): Promise<T[]> {
+    const toAssign = collections.filter(shouldAssign);
+    if (toAssign.length === 0) {
+      return collections;
+    }
+
+    const libraryOf = new Map<string, PlexLibrary>();
+    for (const library of await this.getLibraries()) {
+      const items = await this.getAllItems({
+        ParentId: library.key,
+        Recursive: true,
+        IncludeItemTypes: 'Movie,Series',
+      });
+      items.forEach((item) => libraryOf.set(item.Id, library));
+    }
+
+    const assigned = new Map<string, PlexLibrary>();
+    for (const collection of toAssign) {
+      const counts = new Map<PlexLibrary, number>();
+      for (const id of await this.getCollectionItems(collection.ratingKey)) {
+        const library = libraryOf.get(id);
+        if (library) {
+          counts.set(library, (counts.get(library) ?? 0) + 1);
+        }
+      }
+      const top = [...counts].sort((a, b) => b[1] - a[1])[0];
+      if (top) {
+        assigned.set(collection.ratingKey, top[0]);
+      }
+    }
+
+    return collections.map((collection) => {
+      const library = assigned.get(collection.ratingKey);
+      return library
+        ? { ...collection, libraryKey: library.key, libraryName: library.title }
+        : collection;
+    });
+  }
+
   // BoxSets aren't tied to a library, so any collection with this title
   public async getCollectionByName(name: string) {
     const collections = await this.getAllCollections();

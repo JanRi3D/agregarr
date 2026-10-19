@@ -1,3 +1,4 @@
+import JellyfinAPI from '@server/api/jellyfin';
 import type PlexAPI from '@server/api/plexapi';
 import type { PlexLibrary } from '@server/api/plexapi';
 import type { PlexCollection } from '@server/lib/collections/core/types';
@@ -181,31 +182,35 @@ export class DiscoveryService {
         existingCollectionIds
       );
 
-      // STEP 2: Reset promotion status for existing pre-existing collections before hub discovery
-      // This ensures we detect when users manually remove collections from hub management
-      await this.resetPreExistingPromotionStatus();
-
-      // STEP 3: Discover hubs and enhance pre-existing collections with hub data
       // Use an object to pass repairedHubNamesCount by reference so it can be modified
       const repairedHubNamesCounter = { count: 0 };
-      await this.discoverHubsAndEnhance(
-        plexClient,
-        libraries,
-        collectionConfigs,
-        discoveredHubConfigs,
-        discoveredPreExistingConfigs,
-        existingHubKeys,
-        existingPreExistingKeys,
-        existingCollectionKeys,
-        existingCollectionIds,
-        allCollections,
-        enhancedExistingConfigs,
-        existingHubConfigs,
-        repairedHubNamesCounter
-      );
 
-      // STEP 4: Promote collections that should be visible but aren't in hub management
-      await this.promoteCollectionsThatShouldBeVisible(plexClient, libraries);
+      // Jellyfin has no hubs: nothing to reset, discover or promote
+      if (!(plexClient instanceof JellyfinAPI)) {
+        // STEP 2: Reset promotion status for existing pre-existing collections before hub discovery
+        // This ensures we detect when users manually remove collections from hub management
+        await this.resetPreExistingPromotionStatus();
+
+        // STEP 3: Discover hubs and enhance pre-existing collections with hub data
+        await this.discoverHubsAndEnhance(
+          plexClient,
+          libraries,
+          collectionConfigs,
+          discoveredHubConfigs,
+          discoveredPreExistingConfigs,
+          existingHubKeys,
+          existingPreExistingKeys,
+          existingCollectionKeys,
+          existingCollectionIds,
+          allCollections,
+          enhancedExistingConfigs,
+          existingHubConfigs,
+          repairedHubNamesCounter
+        );
+
+        // STEP 4: Promote collections that should be visible but aren't in hub management
+        await this.promoteCollectionsThatShouldBeVisible(plexClient, libraries);
+      }
 
       // STEP 5: Sync configs with Plex collections to fix any out-of-sync rating keys/labels
       logger.info(
@@ -624,8 +629,8 @@ export class DiscoveryService {
       }
     }
 
-    // Validate default Plex hubs
-    for (const library of libraries) {
+    // Validate default Plex hubs (Jellyfin has none)
+    for (const library of plexClient instanceof JellyfinAPI ? [] : libraries) {
       try {
         const hubsResponse = await plexClient.getHubManagement(library.key);
         const existingHubIdentifiers = new Set(
@@ -1359,6 +1364,15 @@ export class DiscoveryService {
     try {
       allCollections = await plexClient.getAllCollections();
 
+      // Jellyfin collections aren't in a library: show pre-existing ones
+      // under the library most of their items come from
+      if (plexClient instanceof JellyfinAPI) {
+        allCollections = await plexClient.assignLibraries(
+          allCollections,
+          (collection) => !this.isAgregarrManagedCollection(collection)
+        );
+      }
+
       // Add ALL collections - this is the source of truth for accurate titles
       for (const collection of allCollections) {
         const libraryId = String(collection.libraryKey);
@@ -2060,11 +2074,20 @@ export class DiscoveryService {
         await deletePosterFile(oldPosterFilename);
       }
 
-      // Download and save the new poster
-      const filename = await downloadAndSavePoster(
-        posterUrl,
-        `${collection.title} (${libraryName})`
-      );
+      // Download and save the new poster (Jellyfin poster URLs need its API key)
+      const posterName = `${collection.title} (${libraryName})`;
+      let filename: string | null;
+      if (plexClient instanceof JellyfinAPI) {
+        const { savePosterFile } = await import('@server/lib/posterStorage');
+        const image = await plexClient.getImage(posterUrl);
+        filename = await savePosterFile(
+          image.data,
+          image.contentType,
+          posterName
+        );
+      } else {
+        filename = await downloadAndSavePoster(posterUrl, posterName);
+      }
 
       if (filename) {
         // Update metadata to record the new poster URL and local path

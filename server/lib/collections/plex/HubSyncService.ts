@@ -32,8 +32,20 @@ export class HubSyncService {
     plexClient: PlexAPI,
     onProgress?: (stage: string) => void
   ): Promise<void> {
-    // Hubs and home screen ordering are Plex-only
-    if (this.cancelled || plexClient instanceof JellyfinAPI) return;
+    if (this.cancelled) return;
+
+    // Jellyfin has no hubs; pre-existing collections still get their
+    // posters, backdrops and summaries
+    if (plexClient instanceof JellyfinAPI) {
+      const preExisting = getSettings().plex.preExistingCollectionConfigs || [];
+      if (preExisting.length > 0) {
+        onProgress?.(
+          `Syncing ${preExisting.length} pre-existing collections...`
+        );
+        await this.syncPreExistingCollections(plexClient, preExisting);
+      }
+      return;
+    }
 
     try {
       const settings = getSettings();
@@ -509,7 +521,9 @@ export class HubSyncService {
         const shouldBePromotedToHub =
           this.calculateIsPromotedToHub(preExistingConfig);
 
-        if (shouldBePromotedToHub) {
+        if (plexClient instanceof JellyfinAPI) {
+          // No hub visibility on Jellyfin
+        } else if (shouldBePromotedToHub) {
           // Collection should be in hub management - update visibility
           // Evaluate time restrictions and get effective visibility config
           const effectiveVisibilityConfig =
@@ -1517,8 +1531,7 @@ export class HubSyncService {
   public async syncPreExistingCollectionSortTitles(
     plexClient: PlexAPI
   ): Promise<void> {
-    // Hubs and home screen ordering are Plex-only
-    if (this.cancelled || plexClient instanceof JellyfinAPI) return;
+    if (this.cancelled) return;
 
     try {
       const settings = getSettings();
