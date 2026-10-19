@@ -34,6 +34,7 @@ interface JellyfinItem {
   Path?: string;
   LockData?: boolean;
   DisplayOrder?: string;
+  People?: { Name: string; Type?: string }[];
   DateLastMediaAdded?: string;
   MediaSources?: { Path?: string }[];
   UserData?: {
@@ -119,6 +120,11 @@ type PlexCompatible = Pick<
   | 'createLabelBasedSmartCollection'
   | 'updateLabelBasedSmartCollectionUri'
   | 'getPlexUserTitle'
+  | 'getCollectionByName'
+  | 'getLibraryActors'
+  | 'getLibraryDirectors'
+  | 'getItemsByActor'
+  | 'getItemsByDirector'
 >;
 
 const PAGE_SIZE = 500;
@@ -192,6 +198,13 @@ const toPlexMetadata = (item: JellyfinItem): PlexMetadata => {
     viewedLeafCount: 0,
   };
 };
+
+// Plex keeps placeholder TV shows out of person collections by this title
+const PLACEHOLDER_EPISODE_TITLE = 'Trailer (Placeholder)';
+
+const isPlaceholderMovie = (item: JellyfinItem) =>
+  !!item.Tags?.includes('trailer-placeholder') ||
+  /^(Trailer|Placeholder|Coming Soon)$/.test(editionFromPath(item.Path) ?? '');
 
 const DISPLAY_ORDERS = {
   release: 'PremiereDate',
@@ -411,6 +424,12 @@ class JellyfinAPI implements PlexCompatible {
       }
       throw e;
     }
+  }
+
+  // BoxSets aren't tied to a library, so any collection with this title
+  public async getCollectionByName(name: string) {
+    const collections = await this.getAllCollections();
+    return collections.find((collection) => collection.title === name) ?? null;
   }
 
   public async getCollectionMetadataSafe(ratingKey: string) {
@@ -793,8 +812,121 @@ class JellyfinAPI implements PlexCompatible {
     );
   }
 
+  /** Directors in a library by number of items, most first. */
+  public async getLibraryDirectors(libraryId: string, limit?: number) {
+    return this.countPeople(libraryId, 'Director', limit);
+  }
+
+  /** Actors (top 5 billed per item, like Plex) by number of items. */
+  public async getLibraryActors(libraryId: string, limit?: number) {
+    return this.countPeople(libraryId, 'Actor', limit, 5);
+  }
+
+  public async getItemsByDirector(
+    libraryId: string,
+    directorName: string,
+    mediaType: 'movie' | 'tv',
+    limit?: number
+  ): Promise<PlexLibraryItem[]> {
+    return this.getItemsByPerson(
+      libraryId,
+      directorName,
+      'Director',
+      mediaType,
+      limit
+    );
+  }
+
+  public async getItemsByActor(
+    libraryId: string,
+    actorName: string,
+    mediaType: 'movie' | 'tv',
+    limit?: number
+  ): Promise<PlexLibraryItem[]> {
+    return this.getItemsByPerson(
+      libraryId,
+      actorName,
+      'Actor',
+      mediaType,
+      limit
+    );
+  }
+
   public async getPlexUserTitle(): Promise<string | null> {
     return null;
+  }
+
+  private async countPeople(
+    libraryId: string,
+    personType: 'Actor' | 'Director',
+    limit?: number,
+    perItem?: number
+  ): Promise<{ name: string; count: number }[]> {
+    const shows =
+      getSettings().plex.libraries.find((library) => library.key === libraryId)
+        ?.type === 'show';
+    const counts = new Map<string, number>();
+    for (const item of await this.getRealItems(libraryId, shows, {
+      Fields: 'People,Path,Tags',
+    })) {
+      const names = (item.People ?? [])
+        .filter((person) => person.Type === personType)
+        .slice(0, perItem)
+        .map((person) => person.Name);
+      for (const name of new Set(names)) {
+        counts.set(name, (counts.get(name) ?? 0) + 1);
+      }
+    }
+    return [...counts]
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, limit || undefined);
+  }
+
+  private async getItemsByPerson(
+    libraryId: string,
+    name: string,
+    personType: 'Actor' | 'Director',
+    mediaType: 'movie' | 'tv',
+    limit?: number
+  ): Promise<PlexLibraryItem[]> {
+    const items = await this.getRealItems(libraryId, mediaType === 'tv', {
+      Person: name,
+      PersonTypes: personType,
+      Fields: 'ProviderIds,DateCreated,Path,Tags',
+    });
+    return items.slice(0, limit || undefined).map(toPlexItem);
+  }
+
+  /** Movies or shows of a library, without Agregarr's placeholders. */
+  private async getRealItems(
+    libraryId: string,
+    shows: boolean,
+    params: Record<string, unknown>
+  ): Promise<JellyfinItem[]> {
+    const base = { ParentId: libraryId, Recursive: true };
+    const [items, placeholderEpisodes] = await Promise.all([
+      this.getAllItems({
+        ...base,
+        IncludeItemTypes: shows ? 'Series' : 'Movie',
+        ...params,
+      }),
+      shows
+        ? this.getAllItems({
+            ...base,
+            IncludeItemTypes: 'Episode',
+            NameStartsWith: PLACEHOLDER_EPISODE_TITLE,
+          })
+        : [],
+    ]);
+    const placeholderShows = new Set(
+      placeholderEpisodes
+        .filter((episode) => episode.Name === PLACEHOLDER_EPISODE_TITLE)
+        .map((episode) => episode.SeriesId)
+    );
+    return items.filter((item) =>
+      shows ? !placeholderShows.has(item.Id) : !isPlaceholderMovie(item)
+    );
   }
 
   private async removeFromCollection(

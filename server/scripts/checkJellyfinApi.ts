@@ -36,6 +36,45 @@ const routes: Partial<Record<string, (call: Call) => unknown>> = {
     { Name: 'Music', ItemId: 'lib-music', CollectionType: 'music' },
   ],
   'GET /Items': ({ query }) => {
+    if (query.get('Fields') === 'People,Path,Tags') {
+      const directed = { Name: 'Lana Wachowski', Type: 'Director' };
+      return {
+        Items: [
+          { Id: 'm1', Name: 'The Matrix', Type: 'Movie', People: [directed] },
+          { Id: 'm2', Name: 'Speed Racer', Type: 'Movie', People: [directed] },
+          {
+            Id: 'm3',
+            Name: 'Soon',
+            Type: 'Movie',
+            People: [directed],
+            Path: '/m/Soon {tmdb-9} {edition-Trailer}.mp4',
+          },
+        ],
+        TotalRecordCount: 3,
+      };
+    }
+    if (query.get('Person') === 'Bryan Cranston') {
+      return {
+        Items: [
+          { Id: 'bb', Name: 'Breaking Bad', Type: 'Series' },
+          { Id: 'soon-show', Name: 'Soon Show', Type: 'Series' },
+        ],
+        TotalRecordCount: 2,
+      };
+    }
+    if (query.get('NameStartsWith') === 'Trailer (Placeholder)') {
+      return {
+        Items: [
+          {
+            Id: 'ep',
+            Name: 'Trailer (Placeholder)',
+            Type: 'Episode',
+            SeriesId: 'soon-show',
+          },
+        ],
+        TotalRecordCount: 1,
+      };
+    }
     if (query.get('Ids') === 'movie-ph') {
       const played = query.get('userId') === 'u1';
       return {
@@ -434,6 +473,20 @@ const main = async () => {
     /Later \(2031\) \[tvdbid-70\][/\\]Season 00[/\\]S00E00 - Trailer \(Placeholder\)\.mp4$/
   );
   getSettings().main.mediaServerType = 'plex';
+
+  // Person collections: people counted per library, placeholders left out
+  assert.deepStrictEqual(await jellyfin.getLibraryDirectors('lib-movies'), [
+    { name: 'Lana Wachowski', count: 2 },
+  ]);
+  const personItems = await jellyfin.getItemsByActor(
+    'lib-tv',
+    'Bryan Cranston',
+    'tv'
+  );
+  assert.deepStrictEqual(
+    personItems.map((item) => item.ratingKey),
+    ['bb']
+  );
 
   // Missing collections resolve to null instead of throwing
   assert.strictEqual(await jellyfin.getCollectionMetadata('gone'), null);

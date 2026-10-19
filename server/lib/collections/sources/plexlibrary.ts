@@ -6,6 +6,7 @@ import { PosterTemplate } from '@server/entity/PosterTemplate';
  * Creates smart collections based on Plex library metadata (e.g., directors, actors).
  */
 
+import JellyfinAPI from '@server/api/jellyfin';
 import type PlexAPI from '@server/api/plexapi';
 import TheMovieDb from '@server/api/themoviedb';
 import { BaseCollectionSync } from '@server/lib/collections/core/BaseCollectionSync';
@@ -811,13 +812,14 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
   protected async processConfiguration(
     config: CollectionConfig,
     plexClient: PlexAPI,
-    allCollections: PlexCollection[],
+    serverCollections: PlexCollection[],
     processedCollectionKeys?: Set<string>,
     _libraryCache?: LibraryItemsCache,
     _options?: CollectionSyncOptions
   ): Promise<SyncResult> {
     void _libraryCache;
     void _options;
+    const jellyfin = plexClient instanceof JellyfinAPI;
     const mediaType = getCollectionMediaType(config);
     const subtype = config.subtype;
     if (!subtype || (subtype !== 'directors' && subtype !== 'actors')) {
@@ -838,6 +840,24 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
     });
 
     const personLabelPrefix = this.getPersonLabelPrefix(subtype, config.id);
+
+    // Jellyfin collections aren't tied to a library; this config's labels
+    // mark which ones belong to its library
+    const ownLabelPrefixes = [
+      personLabelPrefix,
+      this.getSeparatorLabel(config.id),
+    ].map((prefix) => prefix.toLowerCase());
+    const allCollections = jellyfin
+      ? serverCollections.map((collection) =>
+          (collection.labels ?? []).some((label: string | PlexLabel) =>
+            ownLabelPrefixes.some((prefix) =>
+              this.normalizeLabel(label).startsWith(prefix)
+            )
+          )
+            ? { ...collection, libraryKey: config.libraryId }
+            : collection
+        )
+      : serverCollections;
 
     if (config.useSeparator) {
       await this.syncSeparatorCollection(
@@ -880,6 +900,7 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
       let created = 0;
       let updated = 0;
       let deleted = 0;
+      const keptCollectionKeys = new Set<string>();
 
       for (const person of qualifyingPeople) {
         try {
@@ -914,6 +935,15 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
           if (existingCollection) {
             collectionRatingKey = existingCollection.ratingKey;
             updated++;
+          } else if (jellyfin) {
+            collectionRatingKey = await plexClient.createEmptyCollection(
+              collectionName,
+              config.libraryId,
+              mediaType
+            );
+            if (collectionRatingKey) {
+              created++;
+            }
           } else {
             collectionRatingKey =
               subtype === 'actors'
@@ -941,6 +971,32 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
               );
               continue;
             }
+          }
+
+          if (!collectionRatingKey) {
+            continue;
+          }
+          keptCollectionKeys.add(collectionRatingKey);
+
+          // Jellyfin has no smart collections: refill the person's
+          // collection with their library items on every sync
+          if (jellyfin) {
+            const personItems =
+              subtype === 'actors'
+                ? await plexClient.getItemsByActor(
+                    config.libraryId,
+                    person.name,
+                    mediaType
+                  )
+                : await plexClient.getItemsByDirector(
+                    config.libraryId,
+                    person.name,
+                    mediaType
+                  );
+            await plexClient.updateCollectionContents(
+              collectionRatingKey,
+              personItems
+            );
           }
 
           // Tag collection so discovery recognizes it as Agregarr-managed
@@ -1036,7 +1092,12 @@ export class PlexLibraryCollectionSync extends BaseCollectionSync<'plex'> {
       for (const collection of managedCollections) {
         const normalizedTitle = collection.title.toLowerCase();
 
-        if (qualifyingPersonNames.has(normalizedTitle)) {
+        // Titles only match person names with the default template, so also
+        // keep every collection synced above
+        if (
+          keptCollectionKeys.has(collection.ratingKey) ||
+          qualifyingPersonNames.has(normalizedTitle)
+        ) {
           continue;
         }
 

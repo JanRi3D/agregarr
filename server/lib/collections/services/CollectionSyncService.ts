@@ -873,12 +873,6 @@ export class CollectionSyncService {
   public async createSyncService(
     type: string
   ): Promise<BaseCollectionSync<CollectionSource>> {
-    if (type === 'plexlibrary' && isJellyfinMode()) {
-      throw new Error(
-        'Plex library (actor/director) collections are not supported on Jellyfin'
-      );
-    }
-
     switch (type) {
       case 'trakt': {
         const { TraktCollectionSync } = await import('../sources/trakt');
