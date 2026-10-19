@@ -26,6 +26,7 @@ interface Call {
 }
 
 const collectionItems = new Set(['a', 'b']);
+let serverVersion = '10.10.7';
 const calls: Call[] = [];
 
 const routes: Partial<Record<string, (call: Call) => unknown>> = {
@@ -114,6 +115,7 @@ const routes: Partial<Record<string, (call: Call) => unknown>> = {
     return { Items: [], TotalRecordCount: 0 };
   },
   'GET /Items/Filters': () => ({ Tags: ['Overlay'] }),
+  'GET /System/Info': () => ({ Version: serverVersion }),
   'GET /Items/show-1': () => ({ Id: 'show-1', Name: 'Show', Type: 'Series' }),
   'GET /Items/movie-ph': () => ({
     Id: 'movie-ph',
@@ -233,6 +235,34 @@ const main = async () => {
     { added: 1, removed: 1, keys: ['a'] }
   );
   assert.deepStrictEqual([...collectionItems].sort(), ['b', 'c']);
+
+  // Custom order: DisplayOrder "Default" keeps insertion order, so items
+  // are re-added in the desired order
+  await jellyfin.arrangeCollectionItemsInOrder('col-1', [
+    { ratingKey: 'c' },
+    { ratingKey: 'b' },
+  ]);
+  assert.deepStrictEqual([...collectionItems], ['c', 'b']);
+  const displayOrder = calls.find(
+    (c) => c.method === 'POST' && c.path === '/Items/col-1'
+  ) as Call;
+  assert.strictEqual(JSON.parse(displayOrder.body).DisplayOrder, 'Default');
+
+  // ...but not on servers that ignore it, where it would churn every sync
+  for (serverVersion of ['10.9.11', '10.11.2']) {
+    const before = calls.length;
+    await new JellyfinAPI({
+      url: `http://localhost:${port}`,
+      apiKey: 'secret',
+    }).arrangeCollectionItemsInOrder('col-1', [
+      { ratingKey: 'b' },
+      { ratingKey: 'c' },
+    ]);
+    assert.deepStrictEqual(
+      calls.slice(before).map((c) => c.path),
+      ['/System/Info']
+    );
+  }
 
   // Labels become tags, merged into the full item, data locked
   await jellyfin.addLabelToCollection('col-1', 'AgregarrTrakt10001');

@@ -33,6 +33,7 @@ interface JellyfinItem {
   BackdropImageTags?: string[];
   Path?: string;
   LockData?: boolean;
+  DisplayOrder?: string;
   DateLastMediaAdded?: string;
   MediaSources?: { Path?: string }[];
   UserData?: {
@@ -65,8 +66,8 @@ interface JellyfinAuthResult {
 /**
  * The PlexAPI methods the collection sync pipeline calls. JellyfinAPI implements
  * them with the same meaning, so the pipeline runs unchanged against Jellyfin.
- * Plex-only concepts (hubs, visibility, custom item order, item labels, themes)
- * are no-ops; smart collections are rejected.
+ * Plex-only concepts (hubs, home screen visibility, themes) are no-ops;
+ * smart collections are rejected.
  */
 type PlexCompatible = Pick<
   PlexAPI,
@@ -192,6 +193,12 @@ const toPlexMetadata = (item: JellyfinItem): PlexMetadata => {
   };
 };
 
+const DISPLAY_ORDERS = {
+  release: 'PremiereDate',
+  alpha: 'SortName',
+  custom: 'Default',
+};
+
 const imageContentType = (file: string) =>
   ({ '.png': 'image/png', '.webp': 'image/webp' }[
     path.extname(file).toLowerCase()
@@ -200,6 +207,7 @@ const imageContentType = (file: string) =>
 /** Jellyfin REST client (Jellyfin 10.9+). Collections are Jellyfin BoxSets. */
 class JellyfinAPI implements PlexCompatible {
   private axios: AxiosInstance;
+  private insertionOrder?: Promise<boolean>;
 
   constructor(settings: Pick<JellyfinSettings, 'url' | 'apiKey'>) {
     this.axios = axios.create({
@@ -459,28 +467,81 @@ class JellyfinAPI implements PlexCompatible {
       collectionRatingKey,
       toAdd.map((ratingKey) => ({ ratingKey }))
     );
-    for (const ids of chunks(toRemove)) {
-      await this.axios.delete(`/Collections/${collectionRatingKey}/Items`, {
-        params: { Ids: ids.join(',') },
-      });
-    }
+    await this.removeFromCollection(collectionRatingKey, toRemove);
+    const reordered = await this.arrangeItems(
+      collectionRatingKey,
+      desiredItems
+    );
 
     return {
       added: toAdd.length,
       removed: toRemove.length,
       removedKeys: toRemove,
-      reordered: false,
+      reordered,
       errors: [] as string[],
     };
   }
 
-  // Jellyfin has no manual item order or collection display modes
-  public async updateCollectionContentSort(): Promise<void> {
-    return;
+  /** Plex's collection sort maps to the BoxSet's DisplayOrder. */
+  public async updateCollectionContentSort(
+    collectionRatingKey: string,
+    sortType: 'release' | 'alpha' | 'custom' = 'custom'
+  ): Promise<void> {
+    const displayOrder = DISPLAY_ORDERS[sortType];
+    const item = await this.getItem(collectionRatingKey);
+    if (item.DisplayOrder !== displayOrder) {
+      await this.updateItem(item, { DisplayOrder: displayOrder });
+    }
   }
 
-  public async arrangeCollectionItemsInOrder(): Promise<void> {
-    return;
+  /**
+   * Jellyfin can't move items within a BoxSet, but with DisplayOrder
+   * "Default" it lists them in the order they were added, so re-add them in
+   * the desired order when it differs.
+   */
+  public async arrangeCollectionItemsInOrder(
+    collectionRatingKey: string,
+    orderedItems: { ratingKey: string }[]
+  ): Promise<void> {
+    await this.arrangeItems(collectionRatingKey, orderedItems);
+  }
+
+  /** Returns whether the items had to be re-added. */
+  private async arrangeItems(
+    collectionRatingKey: string,
+    orderedItems: { ratingKey: string }[]
+  ): Promise<boolean> {
+    if (orderedItems.length <= 1 || !(await this.keepsInsertionOrder())) {
+      return false;
+    }
+    await this.updateCollectionContentSort(collectionRatingKey, 'custom');
+
+    const desired = orderedItems.map((item) => item.ratingKey);
+    const current = await this.getCollectionItems(collectionRatingKey);
+    if (
+      current.length === desired.length &&
+      current.every((key, i) => key === desired[i])
+    ) {
+      return false;
+    }
+
+    await this.removeFromCollection(collectionRatingKey, current);
+    await this.addItemsToCollection(collectionRatingKey, orderedItems);
+    return true;
+  }
+
+  /**
+   * DisplayOrder "Default" (insertion order) exists since 10.10; 10.11.0-4
+   * ignored collection display orders (jellyfin/jellyfin#15179). Re-adding
+   * items on those versions would happen on every sync for nothing.
+   */
+  private keepsInsertionOrder(): Promise<boolean> {
+    this.insertionOrder ??= this.getStatus().then(({ Version }) => {
+      const [major, minor, patch] = Version.split('.').map(Number);
+      const version = major * 10000 + minor * 100 + patch;
+      return version >= 101000 && (version < 101100 || version >= 101105);
+    });
+    return this.insertionOrder;
   }
 
   public async updateCollectionMode(): Promise<void> {
@@ -734,6 +795,17 @@ class JellyfinAPI implements PlexCompatible {
 
   public async getPlexUserTitle(): Promise<string | null> {
     return null;
+  }
+
+  private async removeFromCollection(
+    collectionRatingKey: string,
+    itemKeys: string[]
+  ): Promise<void> {
+    for (const ids of chunks(itemKeys)) {
+      await this.axios.delete(`/Collections/${collectionRatingKey}/Items`, {
+        params: { Ids: ids.join(',') },
+      });
+    }
   }
 
   private async getItem(itemId: string): Promise<JellyfinItem> {
