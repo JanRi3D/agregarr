@@ -9,6 +9,7 @@ import OverseerrModal from '@app/components/Settings/OverseerrModal';
 import RadarrModal from '@app/components/Settings/RadarrModal';
 import SonarrModal from '@app/components/Settings/SonarrModal';
 import WatchlistSyncSettings from '@app/components/Settings/WatchlistSyncSettings';
+import useSettings from '@app/hooks/useSettings';
 import globalMessages from '@app/i18n/globalMessages';
 import { Transition } from '@headlessui/react';
 import { ArrowDownOnSquareIcon, FolderIcon } from '@heroicons/react/24/outline';
@@ -243,6 +244,7 @@ interface SettingsDownloadsProps {
 
 const SettingsDownloads = ({ onComplete }: SettingsDownloadsProps) => {
   const intl = useIntl();
+  const { currentSettings } = useSettings();
   const { addToast } = useToasts();
   const [folderBrowser, setFolderBrowser] = useState<{
     isOpen: boolean;
@@ -1063,43 +1065,47 @@ const SettingsDownloads = ({ onComplete }: SettingsDownloadsProps) => {
         </div>
       </div>
 
-      {/* Plex Webhook */}
-      <div className="section">
-        <div className="mb-6">
-          <h3 className="heading">
-            {intl.formatMessage(messages.plexWebhookTitle)}
-          </h3>
-          <p className="description">
-            {intl.formatMessage(messages.plexWebhookDescription)}
-          </p>
-        </div>
-        <div className="space-y-2 text-sm text-stone-400">
-          <p>
-            Webhook path:{' '}
-            <code className="rounded bg-stone-700 px-1 py-0.5 font-mono text-stone-200">
-              /plex-webhook
-            </code>
-          </p>
-          <p className="font-medium text-stone-300">Examples:</p>
-          <ul className="ml-4 space-y-1">
-            <li>
-              Local:{' '}
-              <code className="rounded bg-stone-700 px-1 py-0.5 font-mono text-stone-200">
-                http://192.168.1.100:7171/plex-webhook
-              </code>
-            </li>
-            <li>
-              Remote:{' '}
-              <code className="rounded bg-stone-700 px-1 py-0.5 font-mono text-stone-200">
-                https://agregarr.yourdomain.com/plex-webhook
-              </code>
-            </li>
-          </ul>
-        </div>
-      </div>
+      {currentSettings.mediaServerType !== 'jellyfin' && (
+        <>
+          {/* Plex Webhook */}
+          <div className="section">
+            <div className="mb-6">
+              <h3 className="heading">
+                {intl.formatMessage(messages.plexWebhookTitle)}
+              </h3>
+              <p className="description">
+                {intl.formatMessage(messages.plexWebhookDescription)}
+              </p>
+            </div>
+            <div className="space-y-2 text-sm text-stone-400">
+              <p>
+                Webhook path:{' '}
+                <code className="rounded bg-stone-700 px-1 py-0.5 font-mono text-stone-200">
+                  /plex-webhook
+                </code>
+              </p>
+              <p className="font-medium text-stone-300">Examples:</p>
+              <ul className="ml-4 space-y-1">
+                <li>
+                  Local:{' '}
+                  <code className="rounded bg-stone-700 px-1 py-0.5 font-mono text-stone-200">
+                    http://192.168.1.100:7171/plex-webhook
+                  </code>
+                </li>
+                <li>
+                  Remote:{' '}
+                  <code className="rounded bg-stone-700 px-1 py-0.5 font-mono text-stone-200">
+                    https://agregarr.yourdomain.com/plex-webhook
+                  </code>
+                </li>
+              </ul>
+            </div>
+          </div>
 
-      {/* Plex Watchlist Sync Settings */}
-      <WatchlistSyncSettings />
+          {/* Plex Watchlist Sync Settings */}
+          <WatchlistSyncSettings />
+        </>
+      )}
     </>
   );
 };
