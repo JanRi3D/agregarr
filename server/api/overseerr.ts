@@ -867,18 +867,28 @@ class OverseerrAPI {
   }
 
   /**
-   * Get a user's Plex watchlist
+   * Get a user's entire watchlist (Overseerr pages it at 20 items)
    */
   async getUserWatchlist(userId: number): Promise<{
     results: OverseerrWatchlistItem[];
     total: number;
   }> {
     try {
-      const response = await this.axios.get(`/user/${userId}/watchlist`);
-      return {
-        results: response.data.results || [],
-        total: response.data.totalResults || 0,
-      };
+      const results: OverseerrWatchlistItem[] = [];
+      let total = 0;
+      let totalPages = 1;
+      for (let page = 1; page <= totalPages; page++) {
+        const response = await this.axios.get(`/user/${userId}/watchlist`, {
+          params: { page },
+        });
+        const pageResults: OverseerrWatchlistItem[] =
+          response.data.results || [];
+        if (!pageResults.length) break;
+        results.push(...pageResults);
+        total = response.data.totalResults || 0;
+        totalPages = response.data.totalPages || 1;
+      }
+      return { results, total };
     } catch (error) {
       logger.error(
         `Failed to get user watchlist from Overseerr: ${error.message}`,
