@@ -177,26 +177,23 @@ export const startJobs = (): void => {
     type: 'process',
     interval: 'hours',
     cronSchedule: jobs['watchlist-sync'].schedule,
-    job: schedule.scheduleJob(
-      jobs['watchlist-sync'].schedule,
-      plexOnly('Plex Watchlist Sync', () => {
-        // Check if watchlist sync is enabled
-        const settings = getSettings();
-        const syncSettings = settings.watchlistSync;
+    job: schedule.scheduleJob(jobs['watchlist-sync'].schedule, () => {
+      // Check if watchlist sync is enabled
+      const settings = getSettings();
+      const syncSettings = settings.watchlistSync;
 
-        if (!syncSettings.enableOwner && !syncSettings.enableUsers) {
-          logger.debug('Skipping scheduled Watchlist Sync: Not enabled', {
-            label: 'Jobs',
-          });
-          return;
-        }
-
-        logger.info('Starting scheduled job: Plex Watchlist Sync', {
+      if (!syncSettings.enableOwner && !syncSettings.enableUsers) {
+        logger.debug('Skipping scheduled Watchlist Sync: Not enabled', {
           label: 'Jobs',
         });
-        watchlistSync.run();
-      })
-    ),
+        return;
+      }
+
+      logger.info('Starting scheduled job: Plex Watchlist Sync', {
+        label: 'Jobs',
+      });
+      watchlistSync.run();
+    }),
     running: () => watchlistSync.status.running,
     cancelFn: () => watchlistSync.cancel(),
   });

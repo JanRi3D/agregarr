@@ -8,6 +8,8 @@ export interface OverseerrUser {
   plexId?: number;
   plexTitle?: string;
   plexUsername?: string;
+  jellyfinUserId?: string | null;
+  jellyfinUsername?: string | null;
   username?: string | null;
   email: string;
   displayName?: string;

@@ -76,7 +76,7 @@ class WatchlistSync {
       const usersToSync: {
         id: number;
         displayName?: string;
-        plexUsername?: string;
+        username?: string;
       }[] = [];
 
       // Fetch all users from Overseerr
@@ -91,7 +91,8 @@ class WatchlistSync {
           usersToSync.push({
             id: adminUser.id,
             displayName: adminUser.displayName || 'Admin',
-            plexUsername: adminUser.plexUsername,
+            username:
+              adminUser.plexUsername ?? adminUser.jellyfinUsername ?? undefined,
           });
         } else {
           logger.warn('Admin user (ID 1) not found in Overseerr', {
@@ -107,7 +108,7 @@ class WatchlistSync {
           .map((u) => ({
             id: u.id,
             displayName: u.displayName || `User ${u.id}`,
-            plexUsername: u.plexUsername,
+            username: u.plexUsername ?? u.jellyfinUsername ?? undefined,
           }));
         usersToSync.push(...regularUsers);
       }
@@ -249,7 +250,7 @@ class WatchlistSync {
   }
 
   private async syncUserWatchlist(
-    user: { id: number; displayName?: string; plexUsername?: string },
+    user: { id: number; displayName?: string; username?: string },
     syncSettings: WatchlistSyncSettings,
     overseerrApi: OverseerrAPI,
     radarrMovies: Awaited<ReturnType<RadarrAPI['getMovies']>>,
@@ -281,7 +282,7 @@ class WatchlistSync {
             item,
             syncSettings,
             radarrMovies,
-            user.plexUsername
+            user.username
           );
           if (added) itemsAdded++;
         } else if (item.mediaType === 'tv' && syncSettings.sonarr?.enabled) {
@@ -289,7 +290,7 @@ class WatchlistSync {
             item,
             syncSettings,
             sonarrSeries,
-            user.plexUsername
+            user.username
           );
           if (added) itemsAdded++;
         }
@@ -312,7 +313,7 @@ class WatchlistSync {
     item: OverseerrWatchlistItem,
     syncSettings: WatchlistSyncSettings,
     radarrMovies: Awaited<ReturnType<RadarrAPI['getMovies']>>,
-    plexUsername?: string
+    username?: string
   ): Promise<boolean> {
     const settings = getSettings();
     const radarrSettings = syncSettings.radarr;
@@ -364,10 +365,10 @@ class WatchlistSync {
     const tags = [...(radarrSettings.tags ?? radarrServer.tags ?? [])];
 
     // Add username tag if enabled and username is available
-    if (radarrSettings.tagWithUsername && plexUsername) {
+    if (radarrSettings.tagWithUsername && username) {
       const usernameTagId = await this.getOrCreateTag(
         radarrApi,
-        plexUsername,
+        username,
         'Radarr'
       );
       if (usernameTagId && !tags.includes(usernameTagId)) {
@@ -396,7 +397,7 @@ class WatchlistSync {
       label: 'Watchlist Sync',
       title: item.title,
       tmdbId: item.tmdbId,
-      user: plexUsername,
+      user: username,
     });
 
     return true;
@@ -406,7 +407,7 @@ class WatchlistSync {
     item: OverseerrWatchlistItem,
     syncSettings: WatchlistSyncSettings,
     sonarrSeries: Awaited<ReturnType<SonarrAPI['getSeries']>>,
-    plexUsername?: string
+    username?: string
   ): Promise<boolean> {
     const settings = getSettings();
     const sonarrSettings = syncSettings.sonarr;
@@ -488,10 +489,10 @@ class WatchlistSync {
     const tags = [...(sonarrSettings.tags ?? sonarrServer.tags ?? [])];
 
     // Add username tag if enabled and username is available
-    if (sonarrSettings.tagWithUsername && plexUsername) {
+    if (sonarrSettings.tagWithUsername && username) {
       const usernameTagId = await this.getOrCreateTag(
         sonarrApi,
-        plexUsername,
+        username,
         'Sonarr'
       );
       if (usernameTagId && !tags.includes(usernameTagId)) {
@@ -522,7 +523,7 @@ class WatchlistSync {
       title: item.title,
       tmdbId: item.tmdbId,
       tvdbId: tvdbId,
-      user: plexUsername,
+      user: username,
     });
 
     return true;
