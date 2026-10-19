@@ -1,6 +1,4 @@
-import PlexAPI from '@server/api/plexapi';
-import { getRepository } from '@server/datasource';
-import { User } from '@server/entity/User';
+import type PlexAPI from '@server/api/plexapi';
 import type { LibraryItemsCache } from '@server/lib/collections/core/CollectionUtilities';
 import type {
   CollectionItem,
@@ -8,6 +6,7 @@ import type {
   MissingItem,
 } from '@server/lib/collections/core/types';
 import { libraryCacheService } from '@server/lib/collections/services/LibraryCacheService';
+import { getMediaServerClient } from '@server/lib/mediaServer';
 import type { CollectionConfig } from '@server/lib/settings';
 import { getSettings, getTmdbLanguage } from '@server/lib/settings';
 import logger from '@server/logger';
@@ -983,18 +982,7 @@ async function processPreviewAsync(
       progress: 5,
     });
 
-    // Get Plex client
-    const userRepository = getRepository(User);
-    const admin = await userRepository.findOne({
-      select: { id: true, plexToken: true },
-      where: { id: 1 },
-    });
-
-    if (!admin || !admin.plexToken) {
-      throw new Error('Plex authentication not configured');
-    }
-
-    const plexClient = new PlexAPI({ plexToken: admin.plexToken });
+    const plexClient = await getMediaServerClient();
 
     updatePreviewStatus(sessionId, {
       currentStage: 'Loading library information...',

@@ -1,7 +1,9 @@
-import PlexAPI, { type PlexLibraryItem } from '@server/api/plexapi';
+import type PlexAPI from '@server/api/plexapi';
+import type { PlexLibraryItem } from '@server/api/plexapi';
 import { getRepository } from '@server/datasource';
 import { CollectionMissingItems } from '@server/entity/CollectionMissingItems';
 import { ComingSoonItem } from '@server/entity/ComingSoonItem';
+import { getMediaServerClient } from '@server/lib/mediaServer';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import path from 'path';
@@ -62,20 +64,7 @@ class CollectionsQuickSync {
    * Get Plex client with admin token
    */
   private async getPlexClient(): Promise<PlexAPI> {
-    const { getAdminUser } = await import(
-      '@server/lib/collections/core/CollectionUtilities'
-    );
-    const localAdmin = await getAdminUser();
-
-    if (!localAdmin?.plexToken) {
-      throw new Error('No local admin Plex token found');
-    }
-
-    const settings = getSettings().load();
-    return new PlexAPI({
-      plexToken: localAdmin.plexToken,
-      plexSettings: settings.plex,
-    });
+    return getMediaServerClient();
   }
 
   /**

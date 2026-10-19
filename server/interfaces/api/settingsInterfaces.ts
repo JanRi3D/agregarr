@@ -34,6 +34,7 @@ export interface PublicSettingsResponse {
   locale: string;
   emailEnabled: boolean;
   newPlexLogin: boolean;
+  mediaServerType?: 'plex' | 'jellyfin';
 }
 
 export interface CacheItem {

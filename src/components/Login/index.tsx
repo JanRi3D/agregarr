@@ -1,6 +1,8 @@
 import PageTitle from '@app/components/Common/PageTitle';
 // LanguagePicker removed - English-only support
+import JellyfinLogin from '@app/components/Login/JellyfinLogin';
 import PlexLoginButton from '@app/components/PlexLoginButton';
+import useSettings from '@app/hooks/useSettings';
 import { useUser } from '@app/hooks/useUser';
 import { Transition } from '@headlessui/react';
 import { XCircleIcon } from '@heroicons/react/24/solid';
@@ -13,6 +15,7 @@ const messages = defineMessages({
   signin: 'Sign In',
   signinheader: 'Sign in to continue',
   signinwithplex: 'Sign in with Plex',
+  signinwithjellyfinadmin: 'Sign in with your Jellyfin administrator account',
 });
 
 const Login = () => {
@@ -22,6 +25,8 @@ const Login = () => {
   const [authToken, setAuthToken] = useState<string | undefined>(undefined);
   const { user, revalidate } = useUser();
   const router = useRouter();
+  const { currentSettings } = useSettings();
+  const isJellyfin = currentSettings.mediaServerType === 'jellyfin';
 
   // Effect that is triggered when the `authToken` comes back from the Plex OAuth
   // We take the token and attempt to sign in. If we get a success message, we will
@@ -93,14 +98,22 @@ const Login = () => {
             {intl.formatMessage(messages.signinheader)}
           </div>
           <div className="mb-2 flex justify-center pb-6 text-sm">
-            {intl.formatMessage(messages.signinwithplex)}
+            {intl.formatMessage(
+              isJellyfin
+                ? messages.signinwithjellyfinadmin
+                : messages.signinwithplex
+            )}
           </div>
-          <div className="flex items-center justify-center">
-            <PlexLoginButton
-              isProcessing={isProcessing}
-              onAuthToken={(authToken) => setAuthToken(authToken)}
-            />
-          </div>
+          {isJellyfin ? (
+            <JellyfinLogin />
+          ) : (
+            <div className="flex items-center justify-center">
+              <PlexLoginButton
+                isProcessing={isProcessing}
+                onAuthToken={(authToken) => setAuthToken(authToken)}
+              />
+            </div>
+          )}
         </div>
       </div>
     </div>

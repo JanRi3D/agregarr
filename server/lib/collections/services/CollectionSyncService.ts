@@ -8,6 +8,7 @@ import type {
   CollectionSource,
   SyncResult,
 } from '@server/lib/collections/core/types';
+import { isJellyfinMode } from '@server/lib/mediaServer';
 import type {
   DiscoveredMoviePlaceholder,
   DiscoveredPlaceholder,
@@ -420,7 +421,12 @@ export class CollectionSyncService {
         config.type === 'overseerr' && config.subtype === 'server_owner'
     );
 
-    if (hasUsersConfig || hasServerOwnerConfig) {
+    if (isJellyfinMode()) {
+      // Per-user collection filters go through plex.tv sharing settings
+      logger.debug('Skipping Plex user filter restrictions in Jellyfin mode', {
+        label: 'Collection Sync Service',
+      });
+    } else if (hasUsersConfig || hasServerOwnerConfig) {
       logger.info(
         `Detected Overseerr collections - applying pre-sync user restrictions (users: ${hasUsersConfig}, server_owner: ${hasServerOwnerConfig})`,
         {
@@ -867,6 +873,12 @@ export class CollectionSyncService {
   public async createSyncService(
     type: string
   ): Promise<BaseCollectionSync<CollectionSource>> {
+    if (type === 'plexlibrary' && isJellyfinMode()) {
+      throw new Error(
+        'Plex library (actor/director) collections are not supported on Jellyfin'
+      );
+    }
+
     switch (type) {
       case 'trakt': {
         const { TraktCollectionSync } = await import('../sources/trakt');

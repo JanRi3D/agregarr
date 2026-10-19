@@ -1,4 +1,4 @@
-import PlexAPI from '@server/api/plexapi';
+import { getMediaServerClient } from '@server/lib/mediaServer';
 import type {
   CustomSyncSchedule,
   MultiSourceCombineMode,
@@ -800,20 +800,7 @@ export class IndividualCollectionScheduler {
         }
       );
 
-      // Get admin user for Plex API (same approach as full sync)
-      const { getAdminUser } = await import(
-        '@server/lib/collections/core/CollectionUtilities'
-      );
-      const admin = await getAdminUser();
-
-      if (!admin?.plexToken) {
-        throw new Error('No admin Plex token found');
-      }
-
-      const plexClient = new PlexAPI({
-        plexToken: admin.plexToken,
-        plexSettings: settings.plex,
-      });
+      const plexClient = await getMediaServerClient();
 
       // Determine if this is multi-source
       const extendedConfig = collectionConfig as typeof collectionConfig & {

@@ -62,6 +62,12 @@ export function extractThumbId(url: string | null | undefined): string | null {
     return thumbMatch[1];
   }
 
+  // Format 6 (Jellyfin): /Items/{id}/Images/{type}?tag={imageTag}
+  const jellyfinTagMatch = url.match(/\/Images\/\w+\?(?:.*&)?tag=([^&]+)/);
+  if (jellyfinTagMatch) {
+    return jellyfinTagMatch[1];
+  }
+
   // Couldn't extract thumb ID
   return null;
 }

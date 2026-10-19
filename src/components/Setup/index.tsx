@@ -3,11 +3,13 @@ import Button from '@app/components/Common/Button';
 import PageTitle from '@app/components/Common/PageTitle';
 import LanguagePicker from '@app/components/Layout/LanguagePicker';
 import SettingsDownloads from '@app/components/Settings/SettingsDownloads';
+import SettingsJellyfin from '@app/components/Settings/SettingsJellyfin';
 import SettingsPlex from '@app/components/Settings/SettingsPlex';
 import SettingsSources from '@app/components/Settings/SettingsSources';
 import LoginWithPlex from '@app/components/Setup/LoginWithPlex';
 import SetupSteps from '@app/components/Setup/SetupSteps';
 import useLocale from '@app/hooks/useLocale';
+import { UserType, useUser } from '@app/hooks/useUser';
 import axios from 'axios';
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
@@ -19,8 +21,8 @@ const messages = defineMessages({
   finish: 'Finish Setup',
   finishing: 'Finishing…',
   continue: 'Continue',
-  loginwithplex: 'Sign in with Plex',
-  configureplex: 'Configure Plex',
+  loginwithplex: 'Sign In',
+  configureplex: 'Configure Media Server',
   configuresources: 'Configure Sources',
   configuredownloads: 'Configure Downloads',
 });
@@ -32,6 +34,8 @@ const Setup = () => {
   const [plexSettingsComplete, setPlexSettingsComplete] = useState(false);
   const router = useRouter();
   const { locale } = useLocale();
+  const { user } = useUser();
+  const isJellyfin = user?.userType === UserType.JELLYFIN;
 
   // Scroll to bottom of logo when step changes
   useEffect(() => {
@@ -111,7 +115,15 @@ const Setup = () => {
           )}
           {currentStep === 2 && (
             <div>
-              <SettingsPlex onComplete={() => setPlexSettingsComplete(true)} />
+              {isJellyfin ? (
+                <SettingsJellyfin
+                  onComplete={() => setPlexSettingsComplete(true)}
+                />
+              ) : (
+                <SettingsPlex
+                  onComplete={() => setPlexSettingsComplete(true)}
+                />
+              )}
               <div className="actions">
                 <div className="flex justify-end">
                   <span className="ml-3 inline-flex rounded-md shadow-sm">

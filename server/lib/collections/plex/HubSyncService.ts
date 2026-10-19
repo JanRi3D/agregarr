@@ -1,3 +1,4 @@
+import JellyfinAPI from '@server/api/jellyfin';
 import type PlexAPI from '@server/api/plexapi';
 import { extractErrorMessage } from '@server/lib/collections/core/CollectionUtilities';
 import { TimeRestrictionUtils } from '@server/lib/collections/utils/TimeRestrictionUtils';
@@ -31,7 +32,8 @@ export class HubSyncService {
     plexClient: PlexAPI,
     onProgress?: (stage: string) => void
   ): Promise<void> {
-    if (this.cancelled) return;
+    // Hubs and home screen ordering are Plex-only
+    if (this.cancelled || plexClient instanceof JellyfinAPI) return;
 
     try {
       const settings = getSettings();
@@ -133,7 +135,8 @@ export class HubSyncService {
     plexClient: PlexAPI,
     onProgress?: (stage: string) => void
   ): Promise<void> {
-    if (this.cancelled) return;
+    // Hubs and home screen ordering are Plex-only
+    if (this.cancelled || plexClient instanceof JellyfinAPI) return;
 
     try {
       logger.info('Starting unified ordering sync', {
@@ -1514,7 +1517,8 @@ export class HubSyncService {
   public async syncPreExistingCollectionSortTitles(
     plexClient: PlexAPI
   ): Promise<void> {
-    if (this.cancelled) return;
+    // Hubs and home screen ordering are Plex-only
+    if (this.cancelled || plexClient instanceof JellyfinAPI) return;
 
     try {
       const settings = getSettings();

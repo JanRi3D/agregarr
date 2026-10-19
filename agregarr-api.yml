@@ -207,6 +207,21 @@ components:
         - id
         - name
         - enabled
+    JellyfinSettings:
+      type: object
+      properties:
+        name:
+          type: string
+          readOnly: true
+          example: My Jellyfin
+        url:
+          type: string
+          example: http://jellyfin:8096
+        apiKey:
+          type: string
+        serverId:
+          type: string
+          readOnly: true
     PlexSettings:
       type: object
       properties:
@@ -9108,6 +9123,37 @@ paths:
                   message:
                     type: string
                     example: Failed to reset collections
+  /settings/jellyfin:
+    get:
+      summary: Get Jellyfin settings
+      description: Retrieves current Jellyfin settings.
+      tags:
+        - settings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JellyfinSettings'
+    post:
+      summary: Update Jellyfin settings
+      description: Tests the connection with the given URL and API key, saves it, switches Agregarr to Jellyfin and syncs libraries.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JellyfinSettings'
+      responses:
+        '200':
+          description: 'Values were successfully updated'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JellyfinSettings'
   /settings/plex:
     get:
       summary: Get Plex settings
@@ -11267,6 +11313,35 @@ paths:
                   type: string
               required:
                 - authToken
+  /auth/jellyfin:
+    post:
+      summary: Sign in using a Jellyfin account
+      description: Signs in a Jellyfin administrator by username and password. On the first sign-in (no users yet) the server url is required, the user becomes the Agregarr admin and Agregarr switches to Jellyfin mode.
+      security: []
+      tags:
+        - auth
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+                url:
+                  type: string
+              required:
+                - username
   /auth/local:
     post:
       summary: Sign in using a local account

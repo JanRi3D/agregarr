@@ -1,4 +1,5 @@
 import ImdbRatingsAPI from '@server/api/imdbRatings';
+import JellyfinAPI from '@server/api/jellyfin';
 import type PlexAPI from '@server/api/plexapi';
 import { getRepository } from '@server/datasource';
 import { CollectionMetadata } from '@server/entity/CollectionMetadata';
@@ -323,7 +324,12 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
             ),
           });
 
-          if (effectiveConfig.applyOverlaysDuringSync && collectionRatingKey) {
+          // Overlays are Plex-only
+          if (
+            effectiveConfig.applyOverlaysDuringSync &&
+            collectionRatingKey &&
+            !(plexClient instanceof JellyfinAPI)
+          ) {
             try {
               const { overlayLibraryService } = await import(
                 '@server/lib/overlays/OverlayLibraryService'
@@ -1625,6 +1631,13 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
     libraryKey: string,
     config?: CollectionConfig
   ): Promise<PlexCollection | null> {
+    if (plexClient instanceof JellyfinAPI) {
+      // Jellyfin collections are server-wide; the config-specific label
+      // (stored as a tag) identifies ours
+      const collections = await plexClient.getAllCollections();
+      return collections.find((c) => c.labels.includes(customLabel)) ?? null;
+    }
+
     try {
       // First, try to find collection by stored ratingKey if available
       // This is more reliable than label matching for all single collections

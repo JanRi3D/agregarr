@@ -480,6 +480,15 @@ export interface PlexSettings {
   autoEmptyTrash?: boolean; // Auto-empty Plex trash after placeholder cleanup (default: true)
 }
 
+export type MediaServerType = 'plex' | 'jellyfin';
+
+export interface JellyfinSettings {
+  name: string;
+  url: string; // e.g. http://jellyfin:8096
+  apiKey: string;
+  serverId?: string;
+}
+
 export interface TraktSettings {
   // Legacy API key support (Client ID was previously stored here)
   apiKey?: string;
@@ -621,6 +630,7 @@ export interface MainSettings {
   newPlexLogin: boolean;
   trustProxy: boolean;
   locale: string;
+  mediaServerType?: MediaServerType; // Defaults to plex
   tmdbLanguage?: string; // Language for TMDB API calls (poster metadata, etc.) - defaults to 'en'
   enableTmdbPosterCache?: boolean; // Enable 7-day file cache for TMDB posters to reduce API calls - defaults to true
   nextConfigId?: number; // Next sequential ID for collection configs (starts at 10000)
@@ -657,6 +667,7 @@ interface FullPublicSettings extends PublicSettings {
   series4kEnabled: boolean;
   locale: string;
   newPlexLogin: boolean;
+  mediaServerType: MediaServerType;
 }
 
 // Notification system removed - not needed in Agregarr collections management
@@ -690,6 +701,7 @@ interface AllSettings {
   clientId: string;
   main: MainSettings;
   plex: PlexSettings;
+  jellyfin: JellyfinSettings;
   tautulli: TautulliSettings;
   maintainerr: MaintainerrSettings;
   overseerr: OverseerrSettings;
@@ -738,6 +750,11 @@ class Settings {
         collectionConfigs: [],
         hubConfigs: [],
         preExistingCollectionConfigs: [],
+      },
+      jellyfin: {
+        name: '',
+        url: '',
+        apiKey: '',
       },
       tautulli: {},
       maintainerr: {},
@@ -959,6 +976,14 @@ class Settings {
     this.data.plex = data;
   }
 
+  get jellyfin(): JellyfinSettings {
+    return this.data.jellyfin;
+  }
+
+  set jellyfin(data: JellyfinSettings) {
+    this.data.jellyfin = data;
+  }
+
   get tautulli(): TautulliSettings {
     return this.data.tautulli;
   }
@@ -1061,6 +1086,7 @@ class Settings {
       ),
       locale: this.data.main.locale,
       newPlexLogin: this.data.main.newPlexLogin,
+      mediaServerType: this.data.main.mediaServerType ?? 'plex',
     };
   }
 

@@ -1,3 +1,4 @@
+import JellyfinLogin from '@app/components/Login/JellyfinLogin';
 import PlexLoginButton from '@app/components/PlexLoginButton';
 import { useUser } from '@app/hooks/useUser';
 import axios from 'axios';
@@ -7,6 +8,7 @@ import { defineMessages, useIntl } from 'react-intl';
 const messages = defineMessages({
   welcome: 'Welcome to Agregarr',
   signinMessage: 'Get started by signing in with your Plex account',
+  orJellyfin: 'Or sign in with a Jellyfin administrator account',
 });
 
 interface LoginWithPlexProps {
@@ -44,7 +46,7 @@ const LoginWithPlex = ({ onComplete }: LoginWithPlexProps) => {
   }, [user, onComplete]);
 
   return (
-    <form>
+    <div>
       <div className="mb-2 flex justify-center text-xl font-bold">
         {intl.formatMessage(messages.welcome)}
       </div>
@@ -54,7 +56,11 @@ const LoginWithPlex = ({ onComplete }: LoginWithPlexProps) => {
       <div className="flex items-center justify-center">
         <PlexLoginButton onAuthToken={(authToken) => setAuthToken(authToken)} />
       </div>
-    </form>
+      <div className="mt-8 mb-4 flex justify-center border-t border-gray-600 pt-6 text-sm">
+        {intl.formatMessage(messages.orJellyfin)}
+      </div>
+      <JellyfinLogin showUrl />
+    </div>
   );
 };
 

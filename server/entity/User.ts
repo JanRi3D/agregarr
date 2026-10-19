@@ -67,6 +67,9 @@ export class User {
   public plexId?: number;
 
   @Column({ nullable: true })
+  public jellyfinUserId?: string;
+
+  @Column({ nullable: true })
   public externalOverseerrId?: number;
 
   @Column({ nullable: true, select: false })

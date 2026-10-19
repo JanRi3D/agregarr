@@ -8,6 +8,7 @@ import { OriginalsCollectionSync } from '@server/lib/collections/sources/origina
 import { templateEngine } from '@server/lib/collections/utils/TemplateEngine';
 import { TimeRestrictionUtils } from '@server/lib/collections/utils/TimeRestrictionUtils';
 import collectionsSync from '@server/lib/collectionsSync';
+import { getMediaServerClient, isJellyfinMode } from '@server/lib/mediaServer';
 import type {
   CollectionConfig,
   MultiSourceCombineMode,
@@ -1106,7 +1107,7 @@ collectionsRoutes.delete('/:id', isAuthenticated(), async (req, res) => {
             }
           }
         }
-      } else {
+      } else if (!isJellyfinMode()) {
         logger.warn(
           'No local admin Plex token found for label cleanup during deletion'
         );
@@ -1810,23 +1811,7 @@ collectionsRoutes.post('/:id/sync', isAuthenticated(), async (req, res) => {
       '@server/lib/collections/services/CollectionSyncService'
     );
 
-    // Get admin user for Plex token using the same utility as global sync
-    const { getAdminUser } = await import(
-      '@server/lib/collections/core/CollectionUtilities'
-    );
-    const admin = await getAdminUser();
-
-    if (!admin) {
-      return res.status(500).json({
-        status: 'error',
-        message: 'Admin user not found',
-      });
-    }
-
-    const plexClient = new PlexAPI({
-      plexToken: admin.plexToken,
-      plexSettings: settings.plex,
-    });
+    const plexClient = await getMediaServerClient();
 
     // Start individual collection sync
     const syncPromise = (async () => {

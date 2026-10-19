@@ -1,12 +1,14 @@
 import PageTitle from '@app/components/Common/PageTitle';
 import type { SettingsRoute } from '@app/components/Common/SettingsTabs';
 import SettingsTabs from '@app/components/Common/SettingsTabs';
+import useSettings from '@app/hooks/useSettings';
 import globalMessages from '@app/i18n/globalMessages';
 import { defineMessages, useIntl } from 'react-intl';
 
 const messages = defineMessages({
   menuGeneralSettings: 'General',
   menuPlexSettings: 'Plex',
+  menuJellyfinSettings: 'Jellyfin',
   menuSources: 'Sources',
   menuDownloads: 'Downloads',
   menuLogs: 'Logs',
@@ -20,6 +22,7 @@ type SettingsLayoutProps = {
 
 const SettingsLayout = ({ children }: SettingsLayoutProps) => {
   const intl = useIntl();
+  const { currentSettings } = useSettings();
 
   const settingsRoutes: SettingsRoute[] = [
     {
@@ -28,7 +31,11 @@ const SettingsLayout = ({ children }: SettingsLayoutProps) => {
       regex: /^\/settings(\/main)?$/,
     },
     {
-      text: intl.formatMessage(messages.menuPlexSettings),
+      text: intl.formatMessage(
+        currentSettings.mediaServerType === 'jellyfin'
+          ? messages.menuJellyfinSettings
+          : messages.menuPlexSettings
+      ),
       route: '/settings/plex',
       regex: /^\/settings\/plex/,
     },

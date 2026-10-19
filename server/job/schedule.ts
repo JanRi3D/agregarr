@@ -2,6 +2,7 @@
 import collectionsQuickSync from '@server/lib/collectionsQuickSync';
 import collectionsSync from '@server/lib/collectionsSync';
 // ImageProxy removed - not needed for collections-only app
+import { isJellyfinMode } from '@server/lib/mediaServer';
 import overlayApplication from '@server/lib/overlayApplication';
 import overlaysQuickSync from '@server/lib/overlaysQuickSync';
 import randomizeHomeOrder from '@server/lib/randomizeHomeOrder';
@@ -25,6 +26,15 @@ interface ScheduledJob {
 }
 
 export const scheduledJobs: ScheduledJob[] = [];
+
+// Checked at run time: the media server can be switched while running
+const plexOnly = (name: string, run: () => void) => () => {
+  if (isJellyfinMode()) {
+    logger.debug(`Skipping ${name}: Plex-only job`, { label: 'Jobs' });
+    return;
+  }
+  run();
+};
 
 export const startJobs = (): void => {
   const jobs = getSettings().jobs;
@@ -98,12 +108,12 @@ export const startJobs = (): void => {
     cronSchedule: jobs['plex-randomize-home-order'].schedule,
     job: schedule.scheduleJob(
       jobs['plex-randomize-home-order'].schedule,
-      () => {
+      plexOnly('Plex Randomize Home Order', () => {
         logger.info('Starting scheduled job: Plex Randomize Home Order', {
           label: 'Jobs',
         });
         randomizeHomeOrder.run();
-      }
+      })
     ),
     running: () => randomizeHomeOrder.status.running,
     cancelFn: () => randomizeHomeOrder.cancel(),
@@ -115,12 +125,15 @@ export const startJobs = (): void => {
     type: 'process',
     interval: 'hours',
     cronSchedule: jobs['overlay-application'].schedule,
-    job: schedule.scheduleJob(jobs['overlay-application'].schedule, () => {
-      logger.info('Starting scheduled job: Overlay Application', {
-        label: 'Jobs',
-      });
-      overlayApplication.run();
-    }),
+    job: schedule.scheduleJob(
+      jobs['overlay-application'].schedule,
+      plexOnly('Overlay Application', () => {
+        logger.info('Starting scheduled job: Overlay Application', {
+          label: 'Jobs',
+        });
+        overlayApplication.run();
+      })
+    ),
     running: () => overlayApplication.status.running,
     cancelFn: () => overlayApplication.cancel(),
   });
@@ -131,12 +144,15 @@ export const startJobs = (): void => {
     type: 'process',
     interval: 'minutes',
     cronSchedule: jobs['overlay-quick-sync'].schedule,
-    job: schedule.scheduleJob(jobs['overlay-quick-sync'].schedule, () => {
-      logger.info('Starting scheduled job: Overlay Quick Sync', {
-        label: 'Jobs',
-      });
-      overlaysQuickSync.run();
-    }),
+    job: schedule.scheduleJob(
+      jobs['overlay-quick-sync'].schedule,
+      plexOnly('Overlay Quick Sync', () => {
+        logger.info('Starting scheduled job: Overlay Quick Sync', {
+          label: 'Jobs',
+        });
+        overlaysQuickSync.run();
+      })
+    ),
     running: () => overlaysQuickSync.status.running,
     cancelFn: () => overlaysQuickSync.cancel(),
   });
@@ -161,23 +177,26 @@ export const startJobs = (): void => {
     type: 'process',
     interval: 'hours',
     cronSchedule: jobs['watchlist-sync'].schedule,
-    job: schedule.scheduleJob(jobs['watchlist-sync'].schedule, () => {
-      // Check if watchlist sync is enabled
-      const settings = getSettings();
-      const syncSettings = settings.watchlistSync;
+    job: schedule.scheduleJob(
+      jobs['watchlist-sync'].schedule,
+      plexOnly('Plex Watchlist Sync', () => {
+        // Check if watchlist sync is enabled
+        const settings = getSettings();
+        const syncSettings = settings.watchlistSync;
 
-      if (!syncSettings.enableOwner && !syncSettings.enableUsers) {
-        logger.debug('Skipping scheduled Watchlist Sync: Not enabled', {
+        if (!syncSettings.enableOwner && !syncSettings.enableUsers) {
+          logger.debug('Skipping scheduled Watchlist Sync: Not enabled', {
+            label: 'Jobs',
+          });
+          return;
+        }
+
+        logger.info('Starting scheduled job: Plex Watchlist Sync', {
           label: 'Jobs',
         });
-        return;
-      }
-
-      logger.info('Starting scheduled job: Plex Watchlist Sync', {
-        label: 'Jobs',
-      });
-      watchlistSync.run();
-    }),
+        watchlistSync.run();
+      })
+    ),
     running: () => watchlistSync.status.running,
     cancelFn: () => watchlistSync.cancel(),
   });

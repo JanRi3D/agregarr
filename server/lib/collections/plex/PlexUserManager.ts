@@ -3,6 +3,7 @@ import {
   extractErrorMessage,
   getAdminUser,
 } from '@server/lib/collections/core/CollectionUtilities';
+import { isJellyfinMode } from '@server/lib/mediaServer';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import xml2js from 'xml2js';
@@ -227,6 +228,11 @@ export async function getSharedServers(
 export async function getAllPlexUserIds(
   forceRefresh = false
 ): Promise<string[]> {
+  // Shared Plex users don't exist in Jellyfin mode
+  if (isJellyfinMode()) {
+    return [];
+  }
+
   try {
     const settings = getSettings();
     const admin = await getAdminUser();

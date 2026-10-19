@@ -1,3 +1,4 @@
+import JellyfinAPI from '@server/api/jellyfin';
 import PlexTvAPI from '@server/api/plextv';
 import { UserType } from '@server/constants/user';
 import { getRepository } from '@server/datasource';
@@ -202,7 +203,90 @@ authRoutes.post('/plex', async (req, res, next) => {
   }
 });
 
-// Local authentication removed - Agregarr uses Plex-only authentication
+/**
+ * Sign in with a Jellyfin administrator account. The first sign-in (setup)
+ * also supplies the server URL and switches Agregarr to Jellyfin mode.
+ */
+authRoutes.post('/jellyfin', async (req, res, next) => {
+  const settings = getSettings();
+  const userRepository = getRepository(User);
+  const body = req.body as {
+    username?: string;
+    password?: string;
+    url?: string;
+  };
+  const isSetup = !(await userRepository.count());
+  const url = isSetup ? body.url : settings.jellyfin.url;
+
+  if (!body.username || !url) {
+    return next({ status: 400, message: 'Username and server URL required.' });
+  }
+
+  let account;
+  try {
+    account = await JellyfinAPI.authenticateByName(
+      url,
+      body.username,
+      body.password ?? ''
+    );
+  } catch (e) {
+    logger.warn('Failed Jellyfin sign-in attempt', {
+      label: 'API',
+      ip: req.ip,
+      username: body.username,
+      errorMessage: e.message,
+    });
+    return next({ status: 403, message: 'Invalid Jellyfin credentials.' });
+  }
+
+  // Every signed-in Agregarr user has full control, so only admins get in
+  if (!account.User.Policy?.IsAdministrator) {
+    return next({ status: 403, message: 'Access denied.' });
+  }
+
+  try {
+    let user = await userRepository.findOne({
+      where: { jellyfinUserId: account.User.Id },
+    });
+
+    if (!user) {
+      if (!isSetup && settings.main.mediaServerType !== 'jellyfin') {
+        return next({ status: 403, message: 'Access denied.' });
+      }
+      user = new User({
+        // email is required and unique; Jellyfin users don't have one
+        email: `${account.User.Id}@jellyfin.local`,
+        username: account.User.Name,
+        jellyfinUserId: account.User.Id,
+        permissions: Permission.ADMIN,
+        avatar: '',
+        userType: UserType.JELLYFIN,
+      });
+    }
+    user.username = account.User.Name;
+    await userRepository.save(user);
+
+    if (isSetup) {
+      settings.main.mediaServerType = 'jellyfin';
+      settings.jellyfin.url = url;
+      settings.updateAdminPlexInfo(account.User.Name, account.User.Name);
+      settings.save();
+    }
+
+    if (req.session) {
+      req.session.userId = user.id;
+    }
+
+    return res.status(200).json(user.filter());
+  } catch (e) {
+    logger.error('Something went wrong signing in with Jellyfin', {
+      label: 'API',
+      errorMessage: e.message,
+      ip: req.ip,
+    });
+    return next({ status: 500, message: 'Unable to authenticate.' });
+  }
+});
 
 authRoutes.post('/logout', (req, res, next) => {
   req.session?.destroy((err) => {
