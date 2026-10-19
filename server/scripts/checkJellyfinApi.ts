@@ -339,14 +339,17 @@ const main = async () => {
     );
   }
 
-  // Labels become tags, merged into the full item, data locked
+  // Labels become tags, merged into the full item
   await jellyfin.addLabelToCollection('col-1', 'AgregarrTrakt10001');
   const update = calls.filter((c) => c.method === 'POST').pop() as Call;
   assert.strictEqual(update.path, '/Items/col-1');
   const posted = JSON.parse(update.body);
   assert.deepStrictEqual(posted.Tags, ['keep', 'AgregarrTrakt10001']);
   assert.strictEqual(posted.Overview, 'existing');
-  assert.strictEqual(posted.LockData, true);
+  // Only the changed field is locked: a BoxSet's LockData would be copied
+  // to every movie in it
+  assert.strictEqual(posted.LockData, false);
+  assert.deepStrictEqual(posted.LockedFields, ['Tags']);
 
   // Posters are uploaded base64-encoded with the image content type
   const poster = path.join(process.env.CONFIG_DIRECTORY ?? '', 'poster.png');
@@ -441,13 +444,14 @@ const main = async () => {
   const tagged = JSON.parse(calls[calls.length - 1].body);
   assert.deepStrictEqual(tagged.Tags, ['keep', 'trailer-placeholder']);
   assert.strictEqual(tagged.LockData, false);
+  assert.deepStrictEqual(tagged.LockedFields, []);
 
-  // Title fixes lock the item so Jellyfin doesn't rename it back
+  // Title fixes lock the name so Jellyfin doesn't rename it back
   await jellyfin.updateItemTitle('movie-ph', 'Trailer (Placeholder)');
   const retitled = JSON.parse(calls[calls.length - 1].body);
   assert.deepStrictEqual(
-    { name: retitled.Name, lock: retitled.LockData },
-    { name: 'Trailer (Placeholder)', lock: true }
+    { name: retitled.Name, locked: retitled.LockedFields },
+    { name: 'Trailer (Placeholder)', locked: ['Name'] }
   );
 
   // Posters from URLs are downloaded by Jellyfin itself

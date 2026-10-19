@@ -33,6 +33,7 @@ interface JellyfinItem {
   BackdropImageTags?: string[];
   Path?: string;
   LockData?: boolean;
+  LockedFields?: string[];
   DisplayOrder?: string;
   People?: { Name: string; Type?: string }[];
   DateLastMediaAdded?: string;
@@ -344,6 +345,9 @@ const PLACEHOLDER_EPISODE_TITLE = 'Trailer (Placeholder)';
 const isPlaceholderMovie = (item: JellyfinItem) =>
   !!item.Tags?.includes('trailer-placeholder') ||
   /^(Trailer|Placeholder|Coming Soon)$/.test(editionFromPath(item.Path) ?? '');
+
+// Item fields a Jellyfin metadata refresh can overwrite (MetadataField names)
+const LOCKABLE_FIELDS = ['Name', 'Overview', 'Tags'];
 
 const DISPLAY_ORDERS = {
   release: 'PremiereDate',
@@ -1163,18 +1167,28 @@ class JellyfinAPI implements PlexCompatible {
   /**
    * Jellyfin's update endpoint replaces the whole item, so post back the
    * full item we fetched with the changes merged in. lock keeps Jellyfin
-   * metadata refreshes from reverting our changes; without it the item's
-   * lock is left as it was.
+   * metadata refreshes from reverting the changed fields.
+   *
+   * It locks those fields, never the whole item: when a folder's LockData
+   * changes Jellyfin copies it to every child, which for a BoxSet means
+   * every movie in the collection.
    */
   private async updateItem(
     item: JellyfinItem,
     changes: Partial<JellyfinItem> & { ForcedSortName?: string },
     lock = true
   ): Promise<void> {
+    const lockedFields = new Set(item.LockedFields ?? []);
+    if (lock) {
+      Object.keys(changes)
+        .filter((field) => LOCKABLE_FIELDS.includes(field))
+        .forEach((field) => lockedFields.add(field));
+    }
     await this.axios.post(`/Items/${item.Id}`, {
       ...item,
       ...changes,
-      LockData: lock || item.LockData,
+      LockData: item.LockData ?? false,
+      LockedFields: [...lockedFields],
     });
   }
 
