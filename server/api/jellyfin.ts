@@ -36,12 +36,44 @@ interface JellyfinItem {
   DisplayOrder?: string;
   People?: { Name: string; Type?: string }[];
   DateLastMediaAdded?: string;
-  MediaSources?: { Path?: string }[];
+  MediaSources?: JellyfinMediaSource[];
   UserData?: {
     Played?: boolean;
     PlaybackPositionTicks?: number;
     PlayedPercentage?: number;
+    PlayCount?: number;
+    LastPlayedDate?: string;
   };
+}
+
+interface JellyfinMediaStream {
+  Type?: string; // 'Video' | 'Audio' | 'Subtitle' | ...
+  Codec?: string;
+  Profile?: string;
+  Width?: number;
+  Height?: number;
+  BitDepth?: number;
+  ColorTransfer?: string;
+  ColorPrimaries?: string;
+  ColorSpace?: string;
+  VideoRangeType?: string;
+  DvProfile?: number;
+  RealFrameRate?: number;
+  Channels?: number;
+  ChannelLayout?: string;
+  DisplayTitle?: string;
+  Language?: string;
+  IsDefault?: boolean;
+  IsForced?: boolean;
+}
+
+interface JellyfinMediaSource {
+  Path?: string;
+  Size?: number;
+  Container?: string;
+  Bitrate?: number;
+  RunTimeTicks?: number;
+  MediaStreams?: JellyfinMediaStream[];
 }
 
 interface JellyfinLibrary {
@@ -104,6 +136,7 @@ type PlexCompatible = Pick<
   | 'deleteHubItem'
   | 'getCurrentPosterUrl'
   | 'updateCollectionPoster'
+  | 'uploadPosterFromFile'
   | 'getCurrentArtUrl'
   | 'uploadArtFromFile'
   | 'lockArt'
@@ -158,11 +191,113 @@ const posterPath = (item: JellyfinItem) =>
 const editionFromPath = (file?: string) =>
   file?.match(/\{edition-([^}]+)\}/)?.[1];
 
-const toPlexMedia = (item: JellyfinItem): PlexLibraryItem['Media'] => {
-  const file = item.MediaSources?.[0]?.Path ?? item.Path;
-  return file && item.Type !== 'Series' && item.Type !== 'Season'
-    ? [{ Part: [{ file }] } as PlexLibraryItem['Media'][number]]
-    : [];
+type PlexMedia = PlexLibraryItem['Media'][number];
+type PlexStream = NonNullable<
+  NonNullable<PlexMedia['Part']>[number]['Stream']
+>[number];
+
+const PLEX_STREAM_TYPES: Record<string, number> = {
+  Video: 1,
+  Audio: 2,
+  Subtitle: 3,
+};
+
+// Jellyfin reports ffmpeg codec names; Plex calls DTS "dca"
+const plexCodec = (codec?: string) =>
+  (codec && { dts: 'dca' }[codec.toLowerCase()]) ?? codec?.toLowerCase() ?? '';
+
+// Plex's resolution buckets ("4k", "1080", ...), by width first so
+// letterboxed films keep their class
+const plexResolution = ({ Width = 0, Height = 0 }: JellyfinMediaStream) =>
+  !Width
+    ? ''
+    : Width >= 3200 || Height >= 2000
+    ? '4k'
+    : Width >= 1700 || Height >= 1000
+    ? '1080'
+    : Width >= 1200 || Height >= 700
+    ? '720'
+    : Height >= 560
+    ? '576'
+    : Height >= 400
+    ? '480'
+    : 'sd';
+
+const plexFrameRate = (fps?: number) =>
+  !fps
+    ? ''
+    : fps < 24.5
+    ? '24p'
+    : fps < 26
+    ? 'PAL'
+    : fps < 31
+    ? 'NTSC'
+    : `${Math.round(fps)}p`;
+
+const toPlexStream = (
+  stream: JellyfinMediaStream,
+  index: number
+): PlexStream => ({
+  id: index,
+  streamType: PLEX_STREAM_TYPES[stream.Type ?? ''] ?? 0,
+  codec: plexCodec(stream.Codec),
+  DOVIPresent:
+    !!stream.VideoRangeType?.startsWith('DOVI') &&
+    stream.VideoRangeType !== 'DOVIInvalid',
+  DOVIProfile: stream.DvProfile,
+  width: stream.Width,
+  height: stream.Height,
+  colorPrimaries: stream.ColorPrimaries,
+  colorSpace: stream.ColorSpace,
+  colorTrc: stream.ColorTransfer,
+  bitDepth: stream.BitDepth,
+  channels: stream.Channels,
+  audioChannelLayout: stream.ChannelLayout,
+  displayTitle: stream.DisplayTitle,
+  languageCode: stream.Language,
+  forced: stream.IsForced,
+});
+
+/** Jellyfin media sources and streams in Plex's Media/Part/Stream shape. */
+const toPlexMedia = (item: JellyfinItem): PlexMedia[] => {
+  const source = item.MediaSources?.[0];
+  const file = source?.Path ?? item.Path;
+  if (!file || item.Type === 'Series' || item.Type === 'Season') {
+    return [];
+  }
+  const streams = source?.MediaStreams ?? [];
+  const video = streams.find((stream) => stream.Type === 'Video') ?? {};
+  const audioStreams = streams.filter((stream) => stream.Type === 'Audio');
+  const audio =
+    audioStreams.find((stream) => stream.IsDefault) ?? audioStreams[0];
+  return [
+    {
+      id: 0,
+      duration: Math.round((source?.RunTimeTicks ?? 0) / 10000),
+      bitrate: Math.round((source?.Bitrate ?? 0) / 1000),
+      width: video.Width ?? 0,
+      height: video.Height ?? 0,
+      aspectRatio:
+        video.Width && video.Height
+          ? Math.round((video.Width / video.Height) * 100) / 100
+          : 0,
+      audioChannels: audio?.Channels ?? 0,
+      audioCodec: plexCodec(audio?.Codec),
+      videoCodec: plexCodec(video.Codec),
+      videoResolution: plexResolution(video),
+      container: source?.Container?.split(',')[0] ?? '',
+      videoFrameRate: plexFrameRate(video.RealFrameRate),
+      videoProfile: video.Profile?.toLowerCase() ?? '',
+      Part: [
+        {
+          id: 0,
+          file,
+          size: source?.Size ?? 0,
+          Stream: streams.map(toPlexStream),
+        },
+      ],
+    },
+  ];
 };
 
 const toPlexItem = (
@@ -185,6 +320,10 @@ const toPlexItem = (
   type: PLEX_TYPES[item.Type] ?? 'movie',
   editionTitle: item.Type === 'Movie' ? editionFromPath(item.Path) : undefined,
   childCount: item.ChildCount,
+  viewCount: item.UserData?.PlayCount,
+  lastViewedAt: item.UserData?.LastPlayedDate
+    ? toUnixSeconds(item.UserData.LastPlayedDate)
+    : undefined,
   Media: toPlexMedia(item),
 });
 
@@ -221,6 +360,7 @@ const imageContentType = (file: string) =>
 class JellyfinAPI implements PlexCompatible {
   private axios: AxiosInstance;
   private insertionOrder?: Promise<boolean>;
+  private adminUserId?: Promise<string | undefined>;
 
   constructor(settings: Pick<JellyfinSettings, 'url' | 'apiKey'>) {
     this.axios = axios.create({
@@ -304,7 +444,8 @@ class JellyfinAPI implements PlexCompatible {
         Fields: 'ProviderIds,DateCreated,Path',
         StartIndex: offset,
         Limit: size,
-        EnableImages: false,
+        EnableImageTypes: 'Primary',
+        ImageTypeLimit: 1,
       },
     });
     return {
@@ -363,7 +504,9 @@ class JellyfinAPI implements PlexCompatible {
     key: string,
     options: { includeChildren?: boolean } = {}
   ): Promise<PlexMetadata> {
-    const metadata = toPlexMetadata(await this.getItem(key));
+    const metadata = toPlexMetadata(
+      await this.getItem(key, await this.getAdminUserId())
+    );
     if (
       options.includeChildren &&
       (metadata.type === 'show' || metadata.type === 'season')
@@ -670,6 +813,10 @@ class JellyfinAPI implements PlexCompatible {
     return tag ? `/Items/${ratingKey}/Images/Primary?tag=${tag}` : null;
   }
 
+  public async uploadPosterFromFile(ratingKey: string, filepath: string) {
+    await this.uploadImage(ratingKey, filepath, 'Primary');
+  }
+
   public async updateCollectionPoster(
     collectionRatingKey: string,
     posterPath: string
@@ -940,8 +1087,26 @@ class JellyfinAPI implements PlexCompatible {
     }
   }
 
-  private async getItem(itemId: string): Promise<JellyfinItem> {
-    return (await this.axios.get<JellyfinItem>(`/Items/${itemId}`)).data;
+  /** userId adds that user's play state (UserData). */
+  private async getItem(
+    itemId: string,
+    userId?: string
+  ): Promise<JellyfinItem> {
+    return (
+      await this.axios.get<JellyfinItem>(`/Items/${itemId}`, {
+        params: { userId },
+      })
+    ).data;
+  }
+
+  /** Play stats come from an administrator, like Plex's owner token. */
+  private getAdminUserId(): Promise<string | undefined> {
+    this.adminUserId ??= this.axios
+      .get<{ Id: string; Policy?: { IsAdministrator?: boolean } }[]>('/Users')
+      .then(
+        ({ data }) => data.find((user) => user.Policy?.IsAdministrator)?.Id
+      );
+    return this.adminUserId;
   }
 
   private async getUserIds(): Promise<string[]> {

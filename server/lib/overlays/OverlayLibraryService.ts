@@ -1,11 +1,12 @@
 import type { MaintainerrCollection } from '@server/api/maintainerr';
+import type PlexAPI from '@server/api/plexapi';
 import type { PlexLibraryItem } from '@server/api/plexapi';
-import PlexAPI from '@server/api/plexapi';
 import type { RadarrMovie } from '@server/api/servarr/radarr';
 import type { SonarrSeries } from '@server/api/servarr/sonarr';
 import { getRepository } from '@server/datasource';
 import { OverlayLibraryConfig } from '@server/entity/OverlayLibraryConfig';
 import { OverlayTemplate } from '@server/entity/OverlayTemplate';
+import { getMediaServerClient } from '@server/lib/mediaServer';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import fs from 'fs/promises';
@@ -325,16 +326,7 @@ class OverlayLibraryService {
       }
 
       // Get library items from Plex
-      const { getAdminUser } = await import(
-        '@server/lib/collections/core/CollectionUtilities'
-      );
-      const admin = await getAdminUser();
-
-      if (!admin) {
-        throw new Error('No admin user found');
-      }
-
-      const plexApi = new PlexAPI({ plexToken: admin.plexToken });
+      const plexApi = await getMediaServerClient();
 
       // Build collection membership map for condition evaluation
       // Only build if any enabled template uses a 'collection' condition field
@@ -527,16 +519,7 @@ class OverlayLibraryService {
       });
 
       // Get admin user for Plex API
-      const { getAdminUser } = await import(
-        '@server/lib/collections/core/CollectionUtilities'
-      );
-      const admin = await getAdminUser();
-
-      if (!admin) {
-        throw new Error('No admin user found');
-      }
-
-      const plexApi = new PlexAPI({ plexToken: admin.plexToken });
+      const plexApi = await getMediaServerClient();
 
       // Build collection membership map if any template uses collection conditions
       const hasCollectionConditions = sortedTemplates.some((template) => {

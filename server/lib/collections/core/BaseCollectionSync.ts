@@ -324,12 +324,7 @@ export abstract class BaseCollectionSync<TSource extends CollectionSource>
             ),
           });
 
-          // Overlays are Plex-only
-          if (
-            effectiveConfig.applyOverlaysDuringSync &&
-            collectionRatingKey &&
-            !(plexClient instanceof JellyfinAPI)
-          ) {
+          if (effectiveConfig.applyOverlaysDuringSync && collectionRatingKey) {
             try {
               const { overlayLibraryService } = await import(
                 '@server/lib/overlays/OverlayLibraryService'

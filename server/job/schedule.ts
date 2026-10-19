@@ -125,15 +125,12 @@ export const startJobs = (): void => {
     type: 'process',
     interval: 'hours',
     cronSchedule: jobs['overlay-application'].schedule,
-    job: schedule.scheduleJob(
-      jobs['overlay-application'].schedule,
-      plexOnly('Overlay Application', () => {
-        logger.info('Starting scheduled job: Overlay Application', {
-          label: 'Jobs',
-        });
-        overlayApplication.run();
-      })
-    ),
+    job: schedule.scheduleJob(jobs['overlay-application'].schedule, () => {
+      logger.info('Starting scheduled job: Overlay Application', {
+        label: 'Jobs',
+      });
+      overlayApplication.run();
+    }),
     running: () => overlayApplication.status.running,
     cancelFn: () => overlayApplication.cancel(),
   });
@@ -144,15 +141,12 @@ export const startJobs = (): void => {
     type: 'process',
     interval: 'minutes',
     cronSchedule: jobs['overlay-quick-sync'].schedule,
-    job: schedule.scheduleJob(
-      jobs['overlay-quick-sync'].schedule,
-      plexOnly('Overlay Quick Sync', () => {
-        logger.info('Starting scheduled job: Overlay Quick Sync', {
-          label: 'Jobs',
-        });
-        overlaysQuickSync.run();
-      })
-    ),
+    job: schedule.scheduleJob(jobs['overlay-quick-sync'].schedule, () => {
+      logger.info('Starting scheduled job: Overlay Quick Sync', {
+        label: 'Jobs',
+      });
+      overlaysQuickSync.run();
+    }),
     running: () => overlaysQuickSync.status.running,
     cancelFn: () => overlaysQuickSync.cancel(),
   });

@@ -1,5 +1,6 @@
+import type PlexAPI from '@server/api/plexapi';
 import type { PlexLibraryItem } from '@server/api/plexapi';
-import PlexAPI from '@server/api/plexapi';
+import { getMediaServerClient } from '@server/lib/mediaServer';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import fs from 'fs/promises';
@@ -84,16 +85,7 @@ class PosterResetJob {
       });
 
       // Get admin user for Plex API
-      const { getAdminUser } = await import(
-        '@server/lib/collections/core/CollectionUtilities'
-      );
-      const admin = await getAdminUser();
-
-      if (!admin) {
-        throw new Error('No admin user found');
-      }
-
-      const plexApi = new PlexAPI({ plexToken: admin.plexToken });
+      const plexApi = await getMediaServerClient();
 
       // Get library info
       const libraries = await plexApi.getLibraries();

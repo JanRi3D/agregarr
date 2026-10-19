@@ -1,4 +1,7 @@
-import PlexAPI, { type PlexLibraryItem } from '@server/api/plexapi';
+import JellyfinAPI from '@server/api/jellyfin';
+import type PlexAPI from '@server/api/plexapi';
+import type { PlexLibraryItem } from '@server/api/plexapi';
+import { getMediaServerClient } from '@server/lib/mediaServer';
 import logger from '@server/logger';
 import { sanitizeForFilename } from '@server/utils/fileSystemHelpers';
 import fs from 'fs/promises';
@@ -236,15 +239,7 @@ class LocalPosterFolderService {
       });
 
       // Get admin user
-      const { getAdminUser } = await import(
-        '@server/lib/collections/core/CollectionUtilities'
-      );
-      const admin = await getAdminUser();
-      if (!admin) {
-        throw new Error('No admin user found');
-      }
-
-      const plexApi = new PlexAPI({ plexToken: admin.plexToken });
+      const plexApi = await getMediaServerClient();
 
       // Get all movie/show libraries from Plex
       const libraries = await plexApi.getLibraries();
@@ -395,37 +390,44 @@ class LocalPosterFolderService {
           stats.skipped++;
           this.libraryProgress[libraryId].skipped++;
         } catch {
-          // Download and save poster directly from Plex
-          const axios = (await import('axios')).default;
-          const { getSettings } = await import('@server/lib/settings');
+          // Download and save poster directly from the media server
+          let contentType: string;
+          let posterBuffer: Buffer;
+          if (plexApi instanceof JellyfinAPI) {
+            ({ data: posterBuffer, contentType } = await plexApi.getImage(
+              currentPlexPosterUrl
+            ));
+          } else {
+            const axios = (await import('axios')).default;
+            const { getSettings } = await import('@server/lib/settings');
 
-          let downloadPath = currentPlexPosterUrl;
+            let downloadPath = currentPlexPosterUrl;
 
-          // If URL is relative, build full URL
-          if (!downloadPath.startsWith('http')) {
-            const settings = getSettings();
-            const baseUrl = `${settings.plex.useSsl ? 'https' : 'http'}://${
-              settings.plex.ip
-            }:${settings.plex.port}`;
-            downloadPath = `${baseUrl}${currentPlexPosterUrl}?X-Plex-Token=${plexApi['plexToken']}`;
+            // If URL is relative, build full URL
+            if (!downloadPath.startsWith('http')) {
+              const settings = getSettings();
+              const baseUrl = `${settings.plex.useSsl ? 'https' : 'http'}://${
+                settings.plex.ip
+              }:${settings.plex.port}`;
+              downloadPath = `${baseUrl}${currentPlexPosterUrl}?X-Plex-Token=${plexApi['plexToken']}`;
+            }
+
+            const response = await axios.get(downloadPath, {
+              responseType: 'arraybuffer',
+              timeout: 30000,
+              maxContentLength: 50 * 1024 * 1024, // 50MB max poster size
+              validateStatus: (status) => status === 200, // Only accept 200 OK
+            });
+            contentType = response.headers['content-type'] || '';
+            posterBuffer = Buffer.from(response.data);
           }
 
-          const response = await axios.get(downloadPath, {
-            responseType: 'arraybuffer',
-            timeout: 30000,
-            maxContentLength: 50 * 1024 * 1024, // 50MB max poster size
-            validateStatus: (status) => status === 200, // Only accept 200 OK
-          });
-
           // Validate content type is an image
-          const contentType = response.headers['content-type'] || '';
           if (!contentType.startsWith('image/')) {
             throw new Error(
               `Invalid content type for poster: ${contentType} (expected image/*)`
             );
           }
-
-          const posterBuffer = Buffer.from(response.data);
 
           // Additional size check (in case maxContentLength wasn't honored)
           if (posterBuffer.length > 50 * 1024 * 1024) {
@@ -485,15 +487,7 @@ class LocalPosterFolderService {
       });
 
       // Get admin user
-      const { getAdminUser } = await import(
-        '@server/lib/collections/core/CollectionUtilities'
-      );
-      const admin = await getAdminUser();
-      if (!admin) {
-        throw new Error('No admin user found');
-      }
-
-      const plexApi = new PlexAPI({ plexToken: admin.plexToken });
+      const plexApi = await getMediaServerClient();
 
       // Get all movie/show libraries from Plex
       const libraries = await plexApi.getLibraries();

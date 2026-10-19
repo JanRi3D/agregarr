@@ -1,3 +1,4 @@
+import JellyfinAPI from '@server/api/jellyfin';
 import type PlexAPI from '@server/api/plexapi';
 import type { PlexLibraryItem } from '@server/api/plexapi';
 import { getSettings } from '@server/lib/settings';
@@ -387,6 +388,10 @@ class PlexBasePosterManager {
     thumbUrl: string,
     ratingKey?: string
   ): Promise<Buffer> {
+    if (plexApi instanceof JellyfinAPI) {
+      return (await plexApi.getImage(thumbUrl)).data;
+    }
+
     let downloadPath = thumbUrl;
 
     // Convert upload:// URLs to downloadable paths
@@ -1134,7 +1139,8 @@ class PlexBasePosterManager {
         }
 
         // Parse filename: {libraryId}_{ratingKey}.{ext}
-        const match = file.match(/^(\d+_\d+)\.(jpg|jpeg|png|webp)$/);
+        // Plex keys are numeric, Jellyfin ids hex
+        const match = file.match(/^([\da-f]+_[\da-f]+)\.(jpg|jpeg|png|webp)$/);
         if (!match) {
           continue;
         }

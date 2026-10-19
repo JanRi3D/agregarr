@@ -1,6 +1,6 @@
-import PlexAPI from '@server/api/plexapi';
 import { getRepository } from '@server/datasource';
 import { OverlayLibraryConfig } from '@server/entity/OverlayLibraryConfig';
+import { getMediaServerClient } from '@server/lib/mediaServer';
 import logger from '@server/logger';
 import { plexBasePosterManager } from './PlexBasePosterManager';
 
@@ -63,15 +63,7 @@ class PlexBasePosterDownloadJob {
       });
 
       // Get admin user
-      const { getAdminUser } = await import(
-        '@server/lib/collections/core/CollectionUtilities'
-      );
-      const admin = await getAdminUser();
-      if (!admin) {
-        throw new Error('No admin user found');
-      }
-
-      const plexApi = new PlexAPI({ plexToken: admin.plexToken });
+      const plexApi = await getMediaServerClient();
 
       // Get all library configs
       const configRepository = getRepository(OverlayLibraryConfig);

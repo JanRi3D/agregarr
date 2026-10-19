@@ -1,8 +1,8 @@
 import type { MaintainerrCollection } from '@server/api/maintainerr';
-import PlexAPI from '@server/api/plexapi';
 import { getRepository } from '@server/datasource';
 import { OverlayLibraryConfig } from '@server/entity/OverlayLibraryConfig';
 import { OverlayTemplate } from '@server/entity/OverlayTemplate';
+import { getMediaServerClient } from '@server/lib/mediaServer';
 import {
   buildRenderContext,
   checkMonitoringStatus,
@@ -39,16 +39,7 @@ overlayTestRouter.post('/', async (req, res) => {
     });
 
     // Get admin user for Plex API access
-    const { getAdminUser } = await import(
-      '@server/lib/collections/core/CollectionUtilities'
-    );
-    const admin = await getAdminUser();
-
-    if (!admin) {
-      return res.status(500).json({ error: 'No admin user found' });
-    }
-
-    const plexApi = new PlexAPI({ plexToken: admin.plexToken });
+    const plexApi = await getMediaServerClient();
 
     // Fetch item metadata
     const item = await plexApi.getMetadata(ratingKey);

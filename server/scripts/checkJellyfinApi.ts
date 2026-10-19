@@ -167,7 +167,40 @@ const routes: Partial<Record<string, (call: Call) => unknown>> = {
   'POST /Items/movie-ph': () => '',
   'POST /Items/movie-ph/RemoteImages/Download': () => '',
   'POST /Items/lib-movies/Refresh': () => '',
-  'GET /Users': () => [{ Id: 'u1' }, { Id: 'u2' }],
+  'GET /Users': () => [
+    { Id: 'u1', Policy: { IsAdministrator: true } },
+    { Id: 'u2' },
+  ],
+  'GET /Items/movie-4k': ({ query }) => ({
+    Id: 'movie-4k',
+    Name: 'Dune',
+    Type: 'Movie',
+    UserData:
+      query.get('userId') === 'u1'
+        ? { PlayCount: 2, LastPlayedDate: '2024-01-02T00:00:00Z' }
+        : undefined,
+    MediaSources: [
+      {
+        Path: '/movies/Dune.mkv',
+        Container: 'mkv',
+        Bitrate: 60000000,
+        MediaStreams: [
+          {
+            Type: 'Video',
+            Codec: 'hevc',
+            Width: 3840,
+            Height: 1608,
+            BitDepth: 10,
+            ColorTransfer: 'smpte2084',
+            VideoRangeType: 'DOVIWithHDR10',
+            DvProfile: 8,
+          },
+          { Type: 'Audio', Codec: 'dts', Channels: 8, Language: 'eng' },
+        ],
+      },
+    ],
+  }),
+  'POST /Items/movie-4k/Images/Primary': () => '',
   'DELETE /UserPlayedItems/movie-ph': () => '',
   'GET /Items/jf-matrix/Images/Primary': () => 'image-bytes',
   'DELETE /Items/col-2': () => '',
@@ -486,6 +519,51 @@ const main = async () => {
   assert.deepStrictEqual(
     personItems.map((item) => item.ratingKey),
     ['bb']
+  );
+
+  // Overlays: media streams come back in Plex's shape and vocabulary, with
+  // an admin's play stats
+  const dune = await jellyfin.getMetadata('movie-4k');
+  const [media] = dune.Media;
+  const [videoStream, audioStream] = media.Part?.[0].Stream ?? [];
+  assert.deepStrictEqual(
+    {
+      resolution: media.videoResolution,
+      audioCodec: media.audioCodec,
+      bitrate: media.bitrate,
+      dolbyVision: videoStream.DOVIPresent,
+      dvProfile: videoStream.DOVIProfile,
+      colorTrc: videoStream.colorTrc,
+      audioStream: audioStream.streamType,
+      language: audioStream.languageCode,
+      viewCount: dune.viewCount,
+    },
+    {
+      resolution: '4k',
+      audioCodec: 'dca',
+      bitrate: 60000,
+      dolbyVision: true,
+      dvProfile: 8,
+      colorTrc: 'smpte2084',
+      audioStream: 2,
+      language: 'eng',
+      viewCount: 2,
+    }
+  );
+
+  // Overlaid posters are uploaded to the item's primary image
+  await jellyfin.uploadPosterFromFile('movie-4k', poster);
+  assert.strictEqual(
+    calls[calls.length - 1].path,
+    '/Items/movie-4k/Images/Primary'
+  );
+
+  // Library listings carry poster paths for base poster downloads
+  assert.strictEqual(
+    calls
+      .find((c) => c.query.get('ParentId') === 'lib-movies')
+      ?.query.get('EnableImageTypes'),
+    'Primary'
   );
 
   // Missing collections resolve to null instead of throwing
