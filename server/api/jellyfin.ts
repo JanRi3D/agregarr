@@ -83,6 +83,12 @@ interface JellyfinLibrary {
   CollectionType?: string; // 'movies' | 'tvshows' | ...
 }
 
+interface JellyfinUser {
+  Id: string;
+  Name: string;
+  Policy?: { IsAdministrator?: boolean; BlockedTags?: string[] };
+}
+
 interface JellyfinItemsResponse {
   Items: JellyfinItem[];
   TotalRecordCount: number;
@@ -1049,6 +1055,39 @@ class JellyfinAPI implements PlexCompatible {
     );
   }
 
+  public async getUsers(): Promise<JellyfinUser[]> {
+    return (await this.axios.get<JellyfinUser[]>('/Users')).data;
+  }
+
+  /**
+   * Set the tags hidden from a user (parental control "blocked tags"): tags
+   * starting with managedPrefix are replaced by tags, the user's own are
+   * kept. Returns whether the policy changed.
+   */
+  public async setBlockedTags(
+    user: JellyfinUser,
+    managedPrefix: string,
+    tags: string[]
+  ): Promise<boolean> {
+    const current = user.Policy?.BlockedTags ?? [];
+    const next = [
+      ...current.filter((tag) => !tag.startsWith(managedPrefix)),
+      ...tags,
+    ];
+    if (
+      next.length === current.length &&
+      next.every((tag, i) => tag === current[i])
+    ) {
+      return false;
+    }
+    // The policy endpoint replaces the whole policy
+    await this.axios.post(`/Users/${user.Id}/Policy`, {
+      ...user.Policy,
+      BlockedTags: next,
+    });
+    return true;
+  }
+
   public async getPlexUserTitle(): Promise<string | null> {
     return null;
   }
@@ -1151,17 +1190,14 @@ class JellyfinAPI implements PlexCompatible {
 
   /** Play stats come from an administrator, like Plex's owner token. */
   private getAdminUserId(): Promise<string | undefined> {
-    this.adminUserId ??= this.axios
-      .get<{ Id: string; Policy?: { IsAdministrator?: boolean } }[]>('/Users')
-      .then(
-        ({ data }) => data.find((user) => user.Policy?.IsAdministrator)?.Id
-      );
+    this.adminUserId ??= this.getUsers().then(
+      (users) => users.find((user) => user.Policy?.IsAdministrator)?.Id
+    );
     return this.adminUserId;
   }
 
   private async getUserIds(): Promise<string[]> {
-    const { data } = await this.axios.get<{ Id: string }[]>('/Users');
-    return data.map((user) => user.Id);
+    return (await this.getUsers()).map((user) => user.Id);
   }
 
   /**

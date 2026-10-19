@@ -1,3 +1,4 @@
+import JellyfinAPI from '@server/api/jellyfin';
 import OverseerrAPI, {
   type OverseerrMediaRequest,
 } from '@server/api/overseerr';
@@ -8,7 +9,7 @@ import type {
   CollectionSource,
   SyncResult,
 } from '@server/lib/collections/core/types';
-import { isJellyfinMode } from '@server/lib/mediaServer';
+import { getMediaServerClient, isJellyfinMode } from '@server/lib/mediaServer';
 import type {
   DiscoveredMoviePlaceholder,
   DiscoveredPlaceholder,
@@ -422,10 +423,28 @@ export class CollectionSyncService {
     );
 
     if (isJellyfinMode()) {
-      // Per-user collection filters go through plex.tv sharing settings
-      logger.debug('Skipping Plex user filter restrictions in Jellyfin mode', {
-        label: 'Collection Sync Service',
-      });
+      // Also runs without user configs, once, to remove stale restrictions
+      if (
+        hasUsersConfig ||
+        hasServerOwnerConfig ||
+        settings.main.overseerrLabelsApplied !== false
+      ) {
+        try {
+          onProgress?.(0, 'Applying Seerr user restrictions...');
+          await this.applyJellyfinUserRestrictions(
+            hasUsersConfig,
+            hasServerOwnerConfig
+          );
+        } catch (error) {
+          logger.error(
+            'Failed to apply Jellyfin user restrictions - continuing with sync',
+            {
+              label: 'Collection Sync Service',
+              error: error instanceof Error ? error.message : String(error),
+            }
+          );
+        }
+      }
     } else if (hasUsersConfig || hasServerOwnerConfig) {
       logger.info(
         `Detected Overseerr collections - applying pre-sync user restrictions (users: ${hasUsersConfig}, server_owner: ${hasServerOwnerConfig})`,
@@ -806,6 +825,77 @@ export class CollectionSyncService {
         }`
       );
     }
+  }
+
+  /**
+   * Jellyfin has no per-user library filters like Plex's sharing settings,
+   * so this uses its parental control "blocked tags" instead: every user is
+   * blocked from other users' request collections (tagged with that user's
+   * label) and from the server owner's, except the owner, who sees all.
+   */
+  private async applyJellyfinUserRestrictions(
+    hasUsersConfig: boolean,
+    hasServerOwnerConfig: boolean
+  ): Promise<void> {
+    const client = await getMediaServerClient();
+    if (!(client instanceof JellyfinAPI)) return;
+
+    const { overseerrCollectionService } = await import(
+      '@server/lib/collections/sources/overseerr'
+    );
+    const { getAdminUser } = await import(
+      '@server/lib/collections/core/CollectionUtilities'
+    );
+    const seerrAdmin =
+      hasUsersConfig || hasServerOwnerConfig
+        ? await overseerrCollectionService.getAdminUser()
+        : null;
+    const seerrUsers = hasUsersConfig
+      ? await overseerrCollectionService.getMediaServerUsers()
+      : [];
+    const normalizeId = (id?: string | null) =>
+      id?.replace(/-/g, '').toLowerCase();
+
+    // The labels overseerrSync tags each collection with
+    const userLabels = seerrUsers
+      .filter((user) => user.id !== seerrAdmin?.id)
+      .map((user) => ({
+        jellyfinUserId: normalizeId(user.jellyfinUserId),
+        label: `AgregarrOverseerrUser${user.plexId || user.id}`,
+      }));
+    const ownerLabel =
+      hasServerOwnerConfig && seerrAdmin
+        ? `AgregarrOverseerrOwner${seerrAdmin.plexId || seerrAdmin.id}`
+        : undefined;
+    const ownerId = normalizeId(
+      seerrAdmin?.jellyfinUserId ?? (await getAdminUser())?.jellyfinUserId
+    );
+
+    let updated = 0;
+    for (const user of await client.getUsers()) {
+      const userId = normalizeId(user.Id);
+      const blocked =
+        userId === ownerId
+          ? []
+          : [
+              ...userLabels
+                .filter((other) => other.jellyfinUserId !== userId)
+                .map((other) => other.label),
+              ...(ownerLabel ? [ownerLabel] : []),
+            ];
+      if (await client.setBlockedTags(user, 'AgregarrOverseerr', blocked)) {
+        updated++;
+      }
+    }
+
+    getSettings().setOverseerrLabelsApplied(
+      hasUsersConfig || hasServerOwnerConfig
+    );
+    logger.info(`Updated blocked tags of ${updated} Jellyfin users`, {
+      label: 'Collection Sync Service',
+      userCollections: userLabels.length,
+      serverOwnerCollection: !!ownerLabel,
+    });
   }
 
   /**

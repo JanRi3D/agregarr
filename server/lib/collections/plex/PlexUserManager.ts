@@ -557,7 +557,7 @@ export async function applyPreSyncUserRestrictions(): Promise<void> {
       '@server/lib/collections/sources/overseerr'
     );
     const potentialOverseerrUsers =
-      await overseerrCollectionService.getUsersWithPlexIds();
+      await overseerrCollectionService.getMediaServerUsers();
     const potentialUserIds = potentialOverseerrUsers
       .map((user) => user.plexId?.toString())
       .filter((id): id is string => Boolean(id));
@@ -639,7 +639,7 @@ export async function applySelectivePreSyncUserRestrictions(
         '@server/lib/collections/sources/overseerr'
       );
       const overseerrUsers =
-        await overseerrCollectionService.getUsersWithPlexIds();
+        await overseerrCollectionService.getMediaServerUsers();
       const adminUser = await overseerrCollectionService.getAdminUser(); // Use external admin user for consistency
 
       const userIds = overseerrUsers

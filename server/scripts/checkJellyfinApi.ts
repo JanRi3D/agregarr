@@ -205,6 +205,7 @@ const routes: Partial<Record<string, (call: Call) => unknown>> = {
   }),
   'POST /Items/movie-4k/Images/Primary': () => '',
   'DELETE /UserPlayedItems/movie-ph': () => '',
+  'POST /Users/u2/Policy': () => '',
   'GET /Items/jf-matrix/Images/Primary': () => 'image-bytes',
   'DELETE /Items/col-2': () => '',
   'GET /Items/col-1': () => ({
@@ -585,6 +586,34 @@ const main = async () => {
     libraryName: 'Movies',
   });
   assert.deepStrictEqual(managed, { ratingKey: 'col-1' });
+
+  // Per-user visibility: Agregarr's blocked tags are replaced, the user's own
+  // and the rest of the policy kept; unchanged policies aren't posted
+  const viewer = {
+    Id: 'u2',
+    Name: 'viewer',
+    Policy: {
+      EnableAllFolders: true,
+      BlockedTags: ['kids-hidden', 'AgregarrOverseerrUser5'],
+    },
+  };
+  assert.ok(
+    await jellyfin.setBlockedTags(viewer, 'AgregarrOverseerr', [
+      'AgregarrOverseerrUser7',
+    ])
+  );
+  const policy = JSON.parse(calls[calls.length - 1].body);
+  assert.deepStrictEqual(policy, {
+    EnableAllFolders: true,
+    BlockedTags: ['kids-hidden', 'AgregarrOverseerrUser7'],
+  });
+  const policyCalls = calls.length;
+  assert.ok(
+    !(await jellyfin.setBlockedTags(viewer, 'AgregarrOverseerr', [
+      'AgregarrOverseerrUser5',
+    ]))
+  );
+  assert.strictEqual(calls.length, policyCalls);
 
   // Missing collections resolve to null instead of throwing
   assert.strictEqual(await jellyfin.getCollectionMetadata('gone'), null);

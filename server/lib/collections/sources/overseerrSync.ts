@@ -1559,7 +1559,7 @@ export class OverseerrCollectionSync extends BaseCollectionSync<'overseerr'> {
     const userCollectionsMap: UserCollectionsMap = {};
 
     // Get users from service layer (will handle both internal and external modes)
-    const allUsers = await overseerrCollectionService.getUsersWithPlexIds();
+    const allUsers = await overseerrCollectionService.getMediaServerUsers();
 
     // Create map for efficient lookup
     const usersById = new Map(allUsers.map((user) => [user.id, user]));

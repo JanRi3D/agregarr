@@ -389,7 +389,7 @@ export class CollectionCleanupService {
     );
 
     // Get all users to track label processing
-    const allUsers = await overseerrCollectionService.getUsersWithPlexIds();
+    const allUsers = await overseerrCollectionService.getMediaServerUsers();
 
     // Delete all Agregarr collections by passing empty config list
     await this.cleanupDisabledCollections(

@@ -4,6 +4,7 @@ import type {
 } from '@server/api/overseerr';
 import OverseerrAPI from '@server/api/overseerr';
 import { extractErrorMessage } from '@server/lib/collections/core/CollectionUtilities';
+import { isJellyfinMode } from '@server/lib/mediaServer';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 
@@ -60,9 +61,10 @@ export class OverseerrCollectionService {
   }
 
   /**
-   * Get all users with Plex IDs from external Overseerr
+   * Get all users with an account on the media server (a Plex ID, or a
+   * Jellyfin user ID in Jellyfin mode) from external Overseerr
    */
-  async getUsersWithPlexIds(): Promise<OverseerrUser[]> {
+  async getMediaServerUsers(): Promise<OverseerrUser[]> {
     const client = this.getOverseerrClient();
     if (!client) {
       logger.error('External Overseerr client not configured', {
@@ -72,9 +74,11 @@ export class OverseerrCollectionService {
     }
 
     try {
-      // Get all users and filter those with Plex IDs
+      const jellyfin = isJellyfinMode();
       const response = await client.getUsers({ take: 1000 });
-      return response.results.filter((user) => user.plexId);
+      return response.results.filter((user) =>
+        jellyfin ? user.jellyfinUserId : user.plexId
+      );
     } catch (error) {
       logger.error('Failed to get users from external Overseerr', {
         label: 'OverseerrCollectionService',
