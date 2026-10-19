@@ -1,3 +1,4 @@
+import JellyfinAPI from '@server/api/jellyfin';
 import type PlexAPI from '@server/api/plexapi';
 import TautulliAPI from '@server/api/tautulli';
 import { BaseCollectionSync } from '@server/lib/collections/core/BaseCollectionSync';
@@ -19,6 +20,7 @@ import type {
   TautulliTemplateContext,
 } from '@server/lib/collections/core/types';
 import { CollectionSyncErrorType } from '@server/lib/collections/core/types';
+import { getMediaServerClient, isJellyfinMode } from '@server/lib/mediaServer';
 import type { CollectionConfig } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
@@ -46,7 +48,10 @@ export class TautulliCollectionSync extends BaseCollectionSync<'tautulli'> {
    */
   protected async validateConfiguration(): Promise<void> {
     const settings = getSettings();
-    if (!settings.tautulli.apiKey || !settings.tautulli.hostname) {
+    if (
+      !isJellyfinMode() &&
+      (!settings.tautulli.apiKey || !settings.tautulli.hostname)
+    ) {
       throw this.createSyncError(
         CollectionSyncErrorType.CONFIGURATION_ERROR,
         'Tautulli not configured - missing API key or hostname'
@@ -435,10 +440,21 @@ export class TautulliCollectionSync extends BaseCollectionSync<'tautulli'> {
   /**
    * Get Tautulli API client with current settings
    */
-  private async getTautulliClient(): Promise<TautulliAPI> {
-    const settings = getSettings();
+  /**
+   * Tautulli only watches Plex; on Jellyfin the same statistics come from
+   * its Playback Reporting plugin, as rows keyed by Jellyfin item ids.
+   */
+  private async getTautulliClient(): Promise<{
+    getContent: (
+      ...args: Parameters<TautulliAPI['getContent']>
+    ) => Promise<TautulliSourceData[]>;
+  }> {
+    const client = isJellyfinMode() ? await getMediaServerClient() : null;
+    if (client instanceof JellyfinAPI) {
+      return { getContent: (...args) => client.getPlaybackStats(...args) };
+    }
     // Create fresh client with current settings
-    return new TautulliAPI(settings.tautulli);
+    return new TautulliAPI(getSettings().tautulli);
   }
 
   private isValidTautulliConfig(config: CollectionConfig): boolean {

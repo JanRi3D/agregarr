@@ -4,6 +4,7 @@ import type {
   PlexLibraryItem,
   PlexMetadata,
 } from '@server/api/plexapi';
+import type { TautulliSourceData } from '@server/lib/collections/core/types';
 import type { JellyfinSettings, Library } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
@@ -1088,6 +1089,99 @@ class JellyfinAPI implements PlexCompatible {
     return true;
   }
 
+  /**
+   * Most watched (by plays or play time) or most popular (by number of
+   * viewers) movies or shows of the last `days` days, in Tautulli's row
+   * shape. Needs the Playback Reporting plugin, which logs every playback;
+   * episodes count towards their show.
+   */
+  public async getPlaybackStats(
+    mediaType: 'movie' | 'tv',
+    days = 30,
+    statType: 'plays' | 'duration' = 'plays',
+    collectionType: 'most_popular' | 'most_watched' = 'most_popular',
+    limit = 20
+  ): Promise<TautulliSourceData[]> {
+    const since = new Date(Date.now() - days * 86400000)
+      .toISOString()
+      .slice(0, 10);
+    const rows = await this.queryPlaybackReporting(
+      `SELECT ItemId, UserId, COUNT(1), SUM(PlayDuration), MAX(DateCreated)
+       FROM PlaybackActivity
+       WHERE ItemType = '${mediaType === 'movie' ? 'Movie' : 'Episode'}'
+         AND DateCreated >= '${since}'
+       GROUP BY ItemId, UserId`
+    );
+
+    // Episodes count towards their show; items deleted since drop out
+    const played = await this.getItemsByIds(rows.map(([itemId]) => itemId));
+    const targetIds = new Map(
+      played.map((item) => [
+        item.Id,
+        mediaType === 'movie' ? item.Id : item.SeriesId,
+      ])
+    );
+    const stats = new Map<
+      string,
+      { plays: number; duration: number; users: Set<string>; last: string }
+    >();
+    for (const [itemId, userId, plays, duration, last] of rows) {
+      const targetId = targetIds.get(itemId);
+      if (!targetId) continue;
+      const stat = stats.get(targetId) ?? {
+        plays: 0,
+        duration: 0,
+        users: new Set<string>(),
+        last: '',
+      };
+      stat.plays += Number(plays);
+      stat.duration += Number(duration);
+      stat.users.add(userId);
+      stat.last = last > stat.last ? last : stat.last;
+      stats.set(targetId, stat);
+    }
+
+    const rank = ([, stat]: [
+      string,
+      { plays: number; duration: number; users: Set<string> }
+    ]) =>
+      collectionType === 'most_popular'
+        ? [stat.users.size, stat.plays]
+        : [statType === 'duration' ? stat.duration : stat.plays, 0];
+    const ranked = [...stats]
+      .sort((a, b) => {
+        const [a1, a2] = rank(a);
+        const [b1, b2] = rank(b);
+        return b1 - a1 || b2 - a2;
+      })
+      .slice(0, limit);
+
+    const items = new Map(
+      (await this.getItemsByIds(ranked.map(([id]) => id))).map((item) => [
+        item.Id,
+        item,
+      ])
+    );
+    return ranked.flatMap(([id, stat]) => {
+      const item = items.get(id);
+      return item
+        ? [
+            {
+              rating_key: id,
+              title: item.Name,
+              media_type: mediaType === 'movie' ? 'movie' : 'show',
+              total_plays: stat.plays,
+              duration: stat.duration,
+              users_watched: stat.users.size,
+              year: item.ProductionYear,
+              tmdb_id: Number(item.ProviderIds?.Tmdb) || undefined,
+              last_played: toUnixSeconds(stat.last),
+            },
+          ]
+        : [];
+    });
+  }
+
   public async getPlexUserTitle(): Promise<string | null> {
     return null;
   }
@@ -1163,6 +1257,39 @@ class JellyfinAPI implements PlexCompatible {
     return items.filter((item) =>
       shows ? !placeholderShows.has(item.Id) : !isPlaceholderMovie(item)
     );
+  }
+
+  /** Runs SQL against the Playback Reporting plugin's activity log. */
+  private async queryPlaybackReporting(sql: string): Promise<string[][]> {
+    try {
+      const { data } = await this.axios.post<{ results?: string[][] }>(
+        '/user_usage_stats/submit_custom_query',
+        { CustomQueryString: sql, ReplaceUserId: false }
+      );
+      return data.results ?? [];
+    } catch (e) {
+      if (axios.isAxiosError(e) && e.response?.status === 404) {
+        throw new Error(
+          'Playback statistics need the Jellyfin Playback Reporting plugin'
+        );
+      }
+      throw e;
+    }
+  }
+
+  private async getItemsByIds(ids: string[]): Promise<JellyfinItem[]> {
+    const items: JellyfinItem[] = [];
+    for (const chunk of chunks([...new Set(ids)])) {
+      const { data } = await this.axios.get<JellyfinItemsResponse>('/Items', {
+        params: {
+          Ids: chunk.join(','),
+          Fields: 'ProviderIds',
+          EnableImages: false,
+        },
+      });
+      items.push(...data.Items);
+    }
+    return items;
   }
 
   private async removeFromCollection(

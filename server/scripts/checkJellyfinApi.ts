@@ -36,6 +36,28 @@ const routes: Partial<Record<string, (call: Call) => unknown>> = {
     { Name: 'Music', ItemId: 'lib-music', CollectionType: 'music' },
   ],
   'GET /Items': ({ query }) => {
+    if (query.get('Ids')?.startsWith('ep1')) {
+      return {
+        Items: [
+          { Id: 'ep1', Name: 'Pilot', Type: 'Episode', SeriesId: 'show-a' },
+          { Id: 'ep2', Name: 'Two', Type: 'Episode', SeriesId: 'show-a' },
+          { Id: 'ep3', Name: 'One', Type: 'Episode', SeriesId: 'show-b' },
+        ],
+      };
+    }
+    if (query.get('Ids')?.includes('show-a')) {
+      return {
+        Items: [
+          {
+            Id: 'show-a',
+            Name: 'Show A',
+            Type: 'Series',
+            ProviderIds: { Tmdb: '11' },
+          },
+          { Id: 'show-b', Name: 'Show B', Type: 'Series' },
+        ],
+      };
+    }
     if (query.get('Fields') === 'People,Path,Tags') {
       const directed = { Name: 'Lana Wachowski', Type: 'Director' };
       return {
@@ -206,6 +228,15 @@ const routes: Partial<Record<string, (call: Call) => unknown>> = {
   'POST /Items/movie-4k/Images/Primary': () => '',
   'DELETE /UserPlayedItems/movie-ph': () => '',
   'POST /Users/u2/Policy': () => '',
+  'POST /user_usage_stats/submit_custom_query': () => ({
+    colums: ['ItemId', 'UserId', 'plays', 'duration', 'last'],
+    results: [
+      ['ep1', 'u1', '2', '100', '2026-10-01 10:00:00'],
+      ['ep2', 'u2', '1', '50', '2026-10-02 10:00:00'],
+      ['ep3', 'u1', '5', '10', '2026-10-03 10:00:00'],
+      ['deleted-episode', 'u1', '9', '9', '2026-10-03 10:00:00'],
+    ],
+  }),
   'GET /Items/jf-matrix/Images/Primary': () => 'image-bytes',
   'DELETE /Items/col-2': () => '',
   'GET /Items/col-1': () => ({
@@ -614,6 +645,36 @@ const main = async () => {
     ]))
   );
   assert.strictEqual(calls.length, policyCalls);
+
+  // Playback statistics (Playback Reporting plugin): episodes count towards
+  // their show; most popular ranks by viewers, most watched by plays
+  const popular = await jellyfin.getPlaybackStats(
+    'tv',
+    30,
+    'plays',
+    'most_popular'
+  );
+  assert.deepStrictEqual(
+    popular.map((row) => [row.rating_key, row.users_watched, row.total_plays]),
+    [
+      ['show-a', 2, 3],
+      ['show-b', 1, 5],
+    ]
+  );
+  assert.deepStrictEqual(
+    { type: popular[0].media_type, tmdb: popular[0].tmdb_id },
+    { type: 'show', tmdb: 11 }
+  );
+  const watched = await jellyfin.getPlaybackStats(
+    'tv',
+    30,
+    'plays',
+    'most_watched'
+  );
+  assert.deepStrictEqual(
+    watched.map((row) => row.rating_key),
+    ['show-b', 'show-a']
+  );
 
   // Missing collections resolve to null instead of throwing
   assert.strictEqual(await jellyfin.getCollectionMetadata('gone'), null);
