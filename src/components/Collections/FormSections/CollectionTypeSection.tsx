@@ -119,11 +119,16 @@ const CollectionTypeSection = ({
     values.subtype
   );
 
+  // On Jellyfin these run against Jellyfin itself (Playback Reporting for stats)
+  const isJellyfin = currentSettings.mediaServerType === 'jellyfin';
   const collectionTypes = [
     { value: 'overseerr', label: 'Seerr Requests' },
-    { value: 'tautulli', label: 'Tautulli Statistics' },
+    {
+      value: 'tautulli',
+      label: isJellyfin ? 'Playback Statistics' : 'Tautulli Statistics',
+    },
     { value: 'trakt', label: 'Trakt Lists' },
-    { value: 'plex', label: 'Plex Library' },
+    { value: 'plex', label: isJellyfin ? 'Jellyfin Library' : 'Plex Library' },
     { value: 'letterboxd', label: 'Letterboxd Lists' },
     { value: 'tmdb', label: 'TMDB Lists' },
     { value: 'imdb', label: 'IMDb Lists' },
@@ -135,14 +140,12 @@ const CollectionTypeSection = ({
     { value: 'radarrtag', label: 'Radarr Tag' },
     { value: 'sonarrtag', label: 'Sonarr Tag' },
     { value: 'comingsoon', label: 'Coming Soon' },
-    { value: 'filtered_hub', label: 'Filtered Plex Hub' },
+    {
+      value: 'filtered_hub',
+      label: isJellyfin ? 'Filtered Library' : 'Filtered Plex Hub',
+    },
     { value: 'multi-source', label: 'Multiple Sources' },
-  ].filter(
-    // Plex library scans, smart hubs and placeholders don't exist on Jellyfin
-    (type) =>
-      currentSettings.mediaServerType !== 'jellyfin' ||
-      !['plex', 'filtered_hub', 'comingsoon'].includes(type.value)
-  );
+  ];
 
   const getSubtypeOptions = (type: string): SubtypeOption[] => {
     switch (type) {

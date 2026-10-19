@@ -1,4 +1,3 @@
-import useSettings from '@app/hooks/useSettings';
 import type { CollectionFormConfig } from '@app/types/collections';
 import { Menu, Transition } from '@headlessui/react';
 import { ChevronDownIcon, PlusIcon } from '@heroicons/react/24/solid';
@@ -74,7 +73,6 @@ const PosterUploadSection = ({
   isAgregarrCollection = true,
 }: PosterUploadSectionProps) => {
   const intl = useIntl();
-  const { currentSettings } = useSettings();
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedLibraryKey, setSelectedLibraryKey] = useState<string | null>(
     null
@@ -466,41 +464,39 @@ const PosterUploadSection = ({
       )}
 
       {/* Apply overlays during sync - disabled and forced on for Coming Soon */}
-      {currentSettings.mediaServerType !== 'jellyfin' && (
-        <div className="mb-6">
-          <div className="flex items-center">
-            <input
-              type="checkbox"
-              id="applyOverlaysDuringSync"
-              checked={
-                values.type === 'comingsoon'
-                  ? true
-                  : values.applyOverlaysDuringSync ?? false
-              }
-              onChange={(e) =>
-                setFieldValue('applyOverlaysDuringSync', e.target.checked)
-              }
-              disabled={values.type === 'comingsoon'}
-              className={`form-checkbox ${
-                values.type === 'comingsoon'
-                  ? 'cursor-not-allowed opacity-50'
-                  : ''
-              }`}
-            />
-            <label
-              htmlFor="applyOverlaysDuringSync"
-              className={`ml-2 text-sm ${
-                values.type === 'comingsoon' ? 'text-gray-500' : 'text-gray-300'
-              }`}
-            >
-              {intl.formatMessage(messages.applyOverlaysDuringSync)}
-            </label>
-          </div>
-          <div className="label-tip">
-            {intl.formatMessage(messages.applyOverlaysDuringSyncHelp)}
-          </div>
+      <div className="mb-6">
+        <div className="flex items-center">
+          <input
+            type="checkbox"
+            id="applyOverlaysDuringSync"
+            checked={
+              values.type === 'comingsoon'
+                ? true
+                : values.applyOverlaysDuringSync ?? false
+            }
+            onChange={(e) =>
+              setFieldValue('applyOverlaysDuringSync', e.target.checked)
+            }
+            disabled={values.type === 'comingsoon'}
+            className={`form-checkbox ${
+              values.type === 'comingsoon'
+                ? 'cursor-not-allowed opacity-50'
+                : ''
+            }`}
+          />
+          <label
+            htmlFor="applyOverlaysDuringSync"
+            className={`ml-2 text-sm ${
+              values.type === 'comingsoon' ? 'text-gray-500' : 'text-gray-300'
+            }`}
+          >
+            {intl.formatMessage(messages.applyOverlaysDuringSync)}
+          </label>
         </div>
-      )}
+        <div className="label-tip">
+          {intl.formatMessage(messages.applyOverlaysDuringSyncHelp)}
+        </div>
+      </div>
     </>
   );
 };

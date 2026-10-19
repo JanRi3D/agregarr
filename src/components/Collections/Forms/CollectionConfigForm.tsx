@@ -283,7 +283,7 @@ const CollectionFormConfigForm = ({
 }: CollectionConfigFormProps) => {
   const intl = useIntl();
   const { addToast } = useToasts();
-  // Jellyfin has no hubs, smart collections, themes, overlays or placeholders
+  // Jellyfin has no hubs, smart collections or collection themes
   const isJellyfin =
     useSettings().currentSettings.mediaServerType === 'jellyfin';
 
@@ -3660,8 +3660,7 @@ const CollectionFormConfigForm = ({
 
                             {/* Placeholder Creation - show for external sources that can have missing items */}
                             {/* Hide for: overseerr, tautulli, recently_added, plex directors/actors */}
-                            {!isJellyfin &&
-                              typedValues.type &&
+                            {typedValues.type &&
                               typedValues.type !== 'overseerr' &&
                               typedValues.type !== 'tautulli' &&
                               typedValues.type !== 'filtered_hub' &&

@@ -447,14 +447,10 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
       'randomizeHomeOrder',
     ];
 
-    // Hubs, smart collections and placeholders are Plex-only
+    // Hubs and smart collections are Plex-only
     if (
       currentSettings.mediaServerType === 'jellyfin' &&
-      [
-        ...commonFields,
-        'showUnwatchedOnly',
-        'createPlaceholdersForMissing',
-      ].includes(field)
+      [...commonFields, 'showUnwatchedOnly'].includes(field)
     ) {
       return false;
     }

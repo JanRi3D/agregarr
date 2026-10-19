@@ -1543,6 +1543,8 @@
   "components.Settings.jellyfinApiKey": "API Key",
   "components.Settings.jellyfinApiKeyTip": "Create one in the Jellyfin Dashboard under Advanced → API Keys",
   "components.Settings.jellyfinUrl": "Server URL",
+  "components.Settings.jellyfinWebhookDescription": "Immediately reset watched status when a placeholder trailer is played (quick sync also resets it). Requires the Jellyfin Webhook plugin: add a Generic destination with this URL, enable Playback Start and Playback Stop, and use the template below.",
+  "components.Settings.jellyfinWebhookTitle": "Jellyfin Webhook",
   "components.Settings.jellyfinsettings": "Jellyfin Settings",
   "components.Settings.jellyfinsettingsDescription": "Configure the connection to your Jellyfin server. Agregarr creates and manages Collections on your Jellyfin server.",
   "components.Settings.lastSync": "Last Sync",

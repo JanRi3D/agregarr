@@ -1,5 +1,4 @@
 import PageTitle from '@app/components/Common/PageTitle';
-import useSettings from '@app/hooks/useSettings';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { defineMessages, useIntl } from 'react-intl';
@@ -23,19 +22,13 @@ interface TabRoute {
 const PostersLayout = ({ children }: PostersLayoutProps) => {
   const intl = useIntl();
   const router = useRouter();
-  const { currentSettings } = useSettings();
 
   const tabs: TabRoute[] = [
-    // Overlays are Plex-only
-    ...(currentSettings.mediaServerType === 'jellyfin'
-      ? []
-      : [
-          {
-            text: intl.formatMessage(messages.posterOverlays),
-            route: '/posters/overlays',
-            regex: /^\/posters\/overlays/,
-          },
-        ]),
+    {
+      text: intl.formatMessage(messages.posterOverlays),
+      route: '/posters/overlays',
+      regex: /^\/posters\/overlays/,
+    },
     {
       text: intl.formatMessage(messages.collectionPosters),
       route: '/posters/collections',

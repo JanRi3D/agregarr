@@ -100,6 +100,9 @@ const messages = defineMessages({
   plexWebhookTitle: 'Plex Webhook',
   plexWebhookDescription:
     'Automatically reset watched status when a placeholder trailer is played, preventing it from syncing to Trakt or other scrobbling services. Requires Plex Pass. Register the webhook in Plex under Settings → Webhooks.',
+  jellyfinWebhookTitle: 'Jellyfin Webhook',
+  jellyfinWebhookDescription:
+    'Immediately reset watched status when a placeholder trailer is played (quick sync also resets it). Requires the Jellyfin Webhook plugin: add a Generic destination with this URL, enable Playback Start and Playback Stop, and use the template below.',
 });
 
 interface ServerInstanceProps {
@@ -245,6 +248,8 @@ interface SettingsDownloadsProps {
 const SettingsDownloads = ({ onComplete }: SettingsDownloadsProps) => {
   const intl = useIntl();
   const { currentSettings } = useSettings();
+  const isJellyfin = currentSettings.mediaServerType === 'jellyfin';
+  const webhookPath = isJellyfin ? '/jellyfin-webhook' : '/plex-webhook';
   const { addToast } = useToasts();
   const [folderBrowser, setFolderBrowser] = useState<{
     isOpen: boolean;
@@ -1065,47 +1070,61 @@ const SettingsDownloads = ({ onComplete }: SettingsDownloadsProps) => {
         </div>
       </div>
 
-      {currentSettings.mediaServerType !== 'jellyfin' && (
-        <>
-          {/* Plex Webhook */}
-          <div className="section">
-            <div className="mb-6">
-              <h3 className="heading">
-                {intl.formatMessage(messages.plexWebhookTitle)}
-              </h3>
-              <p className="description">
-                {intl.formatMessage(messages.plexWebhookDescription)}
-              </p>
-            </div>
-            <div className="space-y-2 text-sm text-stone-400">
-              <p>
-                Webhook path:{' '}
-                <code className="rounded bg-stone-700 px-1 py-0.5 font-mono text-stone-200">
-                  /plex-webhook
-                </code>
-              </p>
-              <p className="font-medium text-stone-300">Examples:</p>
-              <ul className="ml-4 space-y-1">
-                <li>
-                  Local:{' '}
-                  <code className="rounded bg-stone-700 px-1 py-0.5 font-mono text-stone-200">
-                    http://192.168.1.100:7171/plex-webhook
-                  </code>
-                </li>
-                <li>
-                  Remote:{' '}
-                  <code className="rounded bg-stone-700 px-1 py-0.5 font-mono text-stone-200">
-                    https://agregarr.yourdomain.com/plex-webhook
-                  </code>
-                </li>
-              </ul>
-            </div>
-          </div>
+      {/* Placeholder webhook (Plex or Jellyfin) */}
+      <div className="section">
+        <div className="mb-6">
+          <h3 className="heading">
+            {intl.formatMessage(
+              isJellyfin
+                ? messages.jellyfinWebhookTitle
+                : messages.plexWebhookTitle
+            )}
+          </h3>
+          <p className="description">
+            {intl.formatMessage(
+              isJellyfin
+                ? messages.jellyfinWebhookDescription
+                : messages.plexWebhookDescription
+            )}
+          </p>
+        </div>
+        <div className="space-y-2 text-sm text-stone-400">
+          <p>
+            Webhook path:{' '}
+            <code className="rounded bg-stone-700 px-1 py-0.5 font-mono text-stone-200">
+              {webhookPath}
+            </code>
+          </p>
+          <p className="font-medium text-stone-300">Examples:</p>
+          <ul className="ml-4 space-y-1">
+            <li>
+              Local:{' '}
+              <code className="rounded bg-stone-700 px-1 py-0.5 font-mono text-stone-200">
+                http://192.168.1.100:7171{webhookPath}
+              </code>
+            </li>
+            <li>
+              Remote:{' '}
+              <code className="rounded bg-stone-700 px-1 py-0.5 font-mono text-stone-200">
+                https://agregarr.yourdomain.com{webhookPath}
+              </code>
+            </li>
+          </ul>
+          {isJellyfin && (
+            <p>
+              Template:{' '}
+              <code className="rounded bg-stone-700 px-1 py-0.5 font-mono text-stone-200">
+                {
+                  '{"NotificationType":"{{NotificationType}}","ItemId":"{{ItemId}}","UserId":"{{UserId}}"}'
+                }
+              </code>
+            </p>
+          )}
+        </div>
+      </div>
 
-          {/* Plex Watchlist Sync Settings */}
-          <WatchlistSyncSettings />
-        </>
-      )}
+      {/* Watchlist Sync Settings */}
+      <WatchlistSyncSettings />
     </>
   );
 };

@@ -84,6 +84,10 @@ export function validateApiKeysForCollectionType(
       break;
 
     case 'tautulli':
+      // On Jellyfin, statistics come from the Playback Reporting plugin
+      if (settings.main?.mediaServerType === 'jellyfin') {
+        break;
+      }
       requirements.push({
         service: 'Tautulli',
         required: true,
