@@ -1,8 +1,25 @@
+import { isJellyfinMode } from '@server/lib/mediaServer';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import fs from 'fs/promises';
 import path from 'path';
 import type { PlaceholderOptions, PlaceholderResult } from './types';
+
+/**
+ * TV placeholder file names: Plex's, then Jellyfin's. Jellyfin treats files
+ * ending in ".Trailer" as trailer extras instead of episodes.
+ */
+export const TV_PLACEHOLDER_FILENAMES = [
+  'S00E00.Trailer.mp4',
+  'S00E00 - Trailer (Placeholder).mp4',
+];
+
+/**
+ * Jellyfin only reads provider ids from folder names ("[tmdbid-1]"), so
+ * Jellyfin placeholders carry one to be matched to the right title.
+ */
+const jellyfinIdTag = (idType: 'tmdbid' | 'tvdbid', id?: number) =>
+  isJellyfinMode() && id ? ` [${idType}-${id}]` : '';
 
 /**
  * Sanitize filename to remove invalid characters and decode HTML entities
@@ -35,7 +52,10 @@ async function createMoviePlaceholder(
   // Folder format: MovieName (Year)
   const sanitizedTitle = sanitizeFilename(title);
   const yearStr = year ? ` (${year})` : '';
-  const folderName = `${sanitizedTitle}${yearStr}`;
+  const folderName = `${sanitizedTitle}${yearStr}${jellyfinIdTag(
+    'tmdbid',
+    tmdbId
+  )}`;
   const movieFolder = path.join(libraryPath, folderName);
 
   // Filename format: MovieName (Year) {tmdb-12345} {edition-Trailer}.mp4
@@ -94,7 +114,10 @@ async function createTVPlaceholder(
   // Directory format: ShowName (Year)/Season 00/S00E00.Trailer.mp4
   const sanitizedTitle = sanitizeFilename(title);
   const yearStr = year ? ` (${year})` : '';
-  const showDir = path.join(libraryPath, `${sanitizedTitle}${yearStr}`);
+  const idTag = options.tvdbId
+    ? jellyfinIdTag('tvdbid', options.tvdbId)
+    : jellyfinIdTag('tmdbid', options.tmdbId);
+  const showDir = path.join(libraryPath, `${sanitizedTitle}${yearStr}${idTag}`);
   const seasonDir = path.join(showDir, 'Season 00');
 
   logger.debug('Creating TV show placeholder', {
@@ -108,7 +131,7 @@ async function createTVPlaceholder(
   await fs.mkdir(seasonDir, { recursive: true });
 
   // Create trailer file
-  const filename = 'S00E00.Trailer.mp4';
+  const filename = TV_PLACEHOLDER_FILENAMES[isJellyfinMode() ? 1 : 0];
   const destinationPath = path.join(seasonDir, filename);
   await fs.copyFile(trailerPath, destinationPath);
 
@@ -267,7 +290,7 @@ export async function removePlaceholder(
       !placeholderPath.includes('{edition-Trailer}') &&
       !placeholderPath.includes('{edition-Placeholder}') &&
       !placeholderPath.includes('{edition-Coming Soon}') &&
-      !placeholderPath.includes('S00E00.Trailer.mp4')
+      !TV_PLACEHOLDER_FILENAMES.some((file) => placeholderPath.endsWith(file))
     ) {
       logger.warn(
         'Refusing to delete - path does not appear to be a placeholder',
@@ -428,7 +451,12 @@ export async function scanForMarkerFiles(
         const markerData = JSON.parse(markerContent) as PlaceholderMarker;
 
         // Path to the actual placeholder file
-        const placeholderPath = path.join(season00Dir, 'S00E00.Trailer.mp4');
+        const files = await fs.readdir(season00Dir);
+        const placeholderPath = path.join(
+          season00Dir,
+          files.find((file) => TV_PLACEHOLDER_FILENAMES.includes(file)) ??
+            TV_PLACEHOLDER_FILENAMES[0]
+        );
 
         markers.push({
           ...markerData,

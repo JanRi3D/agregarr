@@ -31,6 +31,15 @@ interface JellyfinItem {
   ParentIndexNumber?: number;
   ImageTags?: Record<string, string>;
   BackdropImageTags?: string[];
+  Path?: string;
+  LockData?: boolean;
+  DateLastMediaAdded?: string;
+  MediaSources?: { Path?: string }[];
+  UserData?: {
+    Played?: boolean;
+    PlaybackPositionTicks?: number;
+    PlayedPercentage?: number;
+  };
 }
 
 interface JellyfinLibrary {
@@ -96,12 +105,16 @@ type PlexCompatible = Pick<
   | 'getCurrentArtUrl'
   | 'uploadArtFromFile'
   | 'lockArt'
+  | 'lockPoster'
   | 'getCurrentThemeUrl'
   | 'uploadThemeFromFile'
   | 'lockTheme'
   | 'addLabelToItem'
   | 'removeLabelFromItem'
   | 'getItemsWithLabel'
+  | 'updateItemTitle'
+  | 'uploadPosterFromUrl'
+  | 'markItemAsUnplayed'
   | 'createLabelBasedSmartCollection'
   | 'updateLabelBasedSmartCollectionUri'
   | 'getPlexUserTitle'
@@ -134,9 +147,20 @@ const posterPath = (item: JellyfinItem) =>
     ? `/Items/${item.Id}/Images/Primary?tag=${item.ImageTags.Primary}`
     : undefined;
 
+// Plex reads editions from "{edition-X}" in the file name; Jellyfin doesn't
+const editionFromPath = (file?: string) =>
+  file?.match(/\{edition-([^}]+)\}/)?.[1];
+
+const toPlexMedia = (item: JellyfinItem): PlexLibraryItem['Media'] => {
+  const file = item.MediaSources?.[0]?.Path ?? item.Path;
+  return file && item.Type !== 'Series' && item.Type !== 'Season'
+    ? [{ Part: [{ file }] } as PlexLibraryItem['Media'][number]]
+    : [];
+};
+
 const toPlexItem = (
   item: JellyfinItem
-): PlexLibraryItem & { thumb?: string } => ({
+): PlexLibraryItem & { thumb?: string; childCount?: number } => ({
   ratingKey: item.Id,
   parentRatingKey: item.SeasonId ?? item.SeriesId,
   grandparentRatingKey: item.SeasonId ? item.SeriesId : undefined,
@@ -152,7 +176,9 @@ const toPlexItem = (
   index: item.IndexNumber,
   parentIndex: item.ParentIndexNumber,
   type: PLEX_TYPES[item.Type] ?? 'movie',
-  Media: [],
+  editionTitle: item.Type === 'Movie' ? editionFromPath(item.Path) : undefined,
+  childCount: item.ChildCount,
+  Media: toPlexMedia(item),
 });
 
 const toPlexMetadata = (item: JellyfinItem): PlexMetadata => {
@@ -254,7 +280,7 @@ class JellyfinAPI implements PlexCompatible {
         ParentId: id,
         Recursive: true,
         IncludeItemTypes: 'Movie,Series',
-        Fields: 'ProviderIds,DateCreated',
+        Fields: 'ProviderIds,DateCreated,Path',
         StartIndex: offset,
         Limit: size,
         EnableImages: false,
@@ -266,20 +292,44 @@ class JellyfinAPI implements PlexCompatible {
     };
   }
 
+  /**
+   * Items added since options.addedAt. Shows count as added when an episode
+   * is, like Plex's recently added shows.
+   */
   public async getRecentlyAdded(
     id: string,
-    options: { addedAt: number } = { addedAt: Date.now() - 1000 * 60 * 60 }
+    options: { addedAt: number } = { addedAt: Date.now() - 1000 * 60 * 60 },
+    mediaType: 'movie' | 'show' = 'movie'
   ): Promise<PlexLibraryItem[]> {
-    const { items } = await this.getLibraryContents(id, {
-      size: 500,
-      sortByDateAdded: true,
+    const shows = mediaType === 'show';
+    const { data } = await this.axios.get<JellyfinItemsResponse>('/Items', {
+      params: {
+        ParentId: id,
+        Recursive: true,
+        IncludeItemTypes: shows ? 'Series' : 'Movie',
+        SortBy: shows ? 'DateLastContentAdded' : 'DateCreated',
+        SortOrder: 'Descending',
+        Fields: 'ProviderIds,DateCreated,Path,DateLastMediaAdded',
+        Limit: PAGE_SIZE,
+        EnableImages: false,
+      },
     });
-    return items.filter((item) => item.addedAt * 1000 >= options.addedAt);
+    return data.Items.filter(
+      (item) =>
+        Date.parse(
+          (shows && item.DateLastMediaAdded) || item.DateCreated || ''
+        ) >= options.addedAt
+    ).map(toPlexItem);
   }
 
+  /** Same as "Scan library" in Jellyfin's UI: new files get metadata. */
   public async scanLibrary(libraryId: string): Promise<void> {
     await this.axios.post(`/Items/${libraryId}/Refresh`, null, {
-      params: { Recursive: true },
+      params: {
+        Recursive: true,
+        MetadataRefreshMode: 'Default',
+        ImageRefreshMode: 'Default',
+      },
     });
   }
 
@@ -288,8 +338,19 @@ class JellyfinAPI implements PlexCompatible {
     return;
   }
 
-  public async getMetadata(key: string): Promise<PlexMetadata> {
-    return toPlexMetadata(await this.getItem(key));
+  public async getMetadata(
+    key: string,
+    options: { includeChildren?: boolean } = {}
+  ): Promise<PlexMetadata> {
+    const metadata = toPlexMetadata(await this.getItem(key));
+    if (
+      options.includeChildren &&
+      (metadata.type === 'show' || metadata.type === 'season')
+    ) {
+      const children = await this.getChildrenMetadata(key);
+      metadata.Children = { size: children.length, Metadata: children };
+    }
+    return metadata;
   }
 
   /** Seasons of a show, episodes of a season. */
@@ -553,6 +614,10 @@ class JellyfinAPI implements PlexCompatible {
     return;
   }
 
+  public async lockPoster(): Promise<void> {
+    return;
+  }
+
   // Jellyfin theme songs are files next to the media; not supported here
   public async getCurrentThemeUrl(): Promise<string | null> {
     return null;
@@ -569,17 +634,90 @@ class JellyfinAPI implements PlexCompatible {
     return;
   }
 
-  // Item labels only drive Plex smart collections and filters
-  public async addLabelToItem(): Promise<void> {
-    return;
+  /** Item labels are Jellyfin tags. Item metadata locks are left as they are. */
+  public async addLabelToItem(ratingKey: string, label: string) {
+    const item = await this.getItem(ratingKey);
+    if (!item.Tags?.includes(label)) {
+      await this.updateItem(
+        item,
+        { Tags: [...(item.Tags ?? []), label] },
+        false
+      );
+    }
   }
 
-  public async removeLabelFromItem(): Promise<void> {
-    return;
+  public async removeLabelFromItem(ratingKey: string, label: string) {
+    const item = await this.getItem(ratingKey);
+    if (item.Tags?.includes(label)) {
+      await this.updateItem(
+        item,
+        { Tags: item.Tags.filter((tag) => tag !== label) },
+        false
+      );
+    }
   }
 
-  public async getItemsWithLabel(): Promise<string[]> {
-    return [];
+  public async getItemsWithLabel(
+    libraryId: string,
+    label: string
+  ): Promise<string[]> {
+    const items = await this.getAllItems({
+      ParentId: libraryId,
+      Recursive: true,
+      IncludeItemTypes: 'Movie,Series',
+      Tags: label,
+    });
+    return items.map((item) => item.Id);
+  }
+
+  public async updateItemTitle(ratingKey: string, title: string) {
+    const item = await this.getItem(ratingKey);
+    if (item.Name !== title) {
+      await this.updateItem(item, { Name: title });
+    }
+  }
+
+  /** Let Jellyfin download a poster from a URL (e.g. TMDB). */
+  public async uploadPosterFromUrl(ratingKey: string, url: string) {
+    await this.axios.post(`/Items/${ratingKey}/RemoteImages/Download`, null, {
+      params: { Type: 'Primary', ImageUrl: url },
+    });
+  }
+
+  /** Mark an item unplayed for one user, or for every user. */
+  public async markItemAsUnplayed(ratingKey: string, userId?: string) {
+    for (const id of userId ? [userId] : await this.getUserIds()) {
+      await this.axios.delete(`/UserPlayedItems/${ratingKey}`, {
+        params: { userId: id },
+      });
+    }
+  }
+
+  /**
+   * Clear any user's played state or resume point on these items. Returns
+   * how many user/item pairs were reset.
+   */
+  public async resetPlayedState(itemIds: string[]): Promise<number> {
+    let reset = 0;
+    for (const userId of await this.getUserIds()) {
+      for (const ids of chunks(itemIds)) {
+        const { data } = await this.axios.get<JellyfinItemsResponse>('/Items', {
+          params: { Ids: ids.join(','), userId, EnableImages: false },
+        });
+        for (const item of data.Items) {
+          const userData = item.UserData ?? {};
+          if (
+            userData.Played ||
+            (userData.PlaybackPositionTicks ?? 0) > 0 ||
+            (userData.PlayedPercentage ?? 0) > 0
+          ) {
+            await this.markItemAsUnplayed(item.Id, userId);
+            reset++;
+          }
+        }
+      }
+    }
+    return reset;
   }
 
   public async createLabelBasedSmartCollection(): Promise<string> {
@@ -602,19 +740,26 @@ class JellyfinAPI implements PlexCompatible {
     return (await this.axios.get<JellyfinItem>(`/Items/${itemId}`)).data;
   }
 
+  private async getUserIds(): Promise<string[]> {
+    const { data } = await this.axios.get<{ Id: string }[]>('/Users');
+    return data.map((user) => user.Id);
+  }
+
   /**
    * Jellyfin's update endpoint replaces the whole item, so post back the
-   * full item we fetched with the changes merged in.
+   * full item we fetched with the changes merged in. lock keeps Jellyfin
+   * metadata refreshes from reverting our changes; without it the item's
+   * lock is left as it was.
    */
   private async updateItem(
     item: JellyfinItem,
-    changes: Partial<JellyfinItem> & { ForcedSortName?: string }
+    changes: Partial<JellyfinItem> & { ForcedSortName?: string },
+    lock = true
   ): Promise<void> {
     await this.axios.post(`/Items/${item.Id}`, {
       ...item,
       ...changes,
-      // Keep Jellyfin metadata refreshes from reverting our changes
-      LockData: true,
+      LockData: lock || item.LockData,
     });
   }
 

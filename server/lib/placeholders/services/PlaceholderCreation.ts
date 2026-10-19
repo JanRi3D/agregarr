@@ -856,8 +856,7 @@ async function verifyPlexPosters(
             const tmdbPosterUrl = `https://image.tmdb.org/t/p/original${posterPath}`;
 
             // Apply TMDB poster to Plex item
-            const posterManager = plexClient['posterManager'];
-            await posterManager.uploadPosterFromUrl(
+            await plexClient.uploadPosterFromUrl(
               plexItem.ratingKey,
               tmdbPosterUrl
             );
@@ -1052,14 +1051,7 @@ async function createPlaceholders(
           leafCount: itemExtended.leafCount,
           ratingKey: item.ratingKey,
         },
-        plexClient['plexClient'] as {
-          query: (path: string) => Promise<{
-            MediaContainer?: {
-              Directory?: unknown[];
-              Metadata?: unknown[];
-            };
-          }>;
-        }
+        plexClient
       );
 
     if (!isPlaceholder) {

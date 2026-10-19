@@ -1,3 +1,4 @@
+import JellyfinAPI from '@server/api/jellyfin';
 import type PlexAPI from '@server/api/plexapi';
 import type { PlexLibraryItem } from '@server/api/plexapi';
 import { getRepository } from '@server/datasource';
@@ -7,6 +8,7 @@ import { getMediaServerClient } from '@server/lib/mediaServer';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import path from 'path';
+import { IsNull, Not } from 'typeorm';
 
 /**
  * Match between a recently added Plex item and a stored missing item
@@ -258,6 +260,13 @@ class CollectionsQuickSync {
         }
       }
 
+      // Without the Jellyfin Webhook plugin there's no play event to react
+      // to, so clear watched state placeholders picked up since the last run
+      if (plexClient instanceof JellyfinAPI) {
+        this.setStage('Resetting watched state of placeholders...');
+        await this.resetPlaceholderPlayedState(plexClient);
+      }
+
       // Cleanup old missing items (>30 days)
       this.setStage('Cleaning up old missing items...');
       const cleanedCount = await this.cleanupOldMissingItems();
@@ -288,6 +297,36 @@ class CollectionsQuickSync {
       this.running = false;
       this.cancelled = false;
       this.currentStage = '';
+    }
+  }
+
+  private async resetPlaceholderPlayedState(client: JellyfinAPI) {
+    try {
+      const rows = await getRepository(ComingSoonItem).find({
+        select: { plexRatingKey: true },
+        where: { plexRatingKey: Not(IsNull()) },
+      });
+      const ids = [
+        ...new Set(
+          rows
+            .map((row) => row.plexRatingKey)
+            .filter((id): id is string => !!id)
+        ),
+      ];
+      if (ids.length === 0) return;
+
+      const reset = await client.resetPlayedState(ids);
+      if (reset > 0) {
+        logger.info('Reset watched state of played placeholders', {
+          label: 'Collections Quick Sync',
+          reset,
+        });
+      }
+    } catch (error) {
+      logger.warn('Failed to reset watched state of placeholders', {
+        label: 'Collections Quick Sync',
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 

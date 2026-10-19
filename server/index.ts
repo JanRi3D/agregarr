@@ -5,6 +5,7 @@ import { getMediaServerClient } from '@server/lib/mediaServer';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import routes from '@server/routes';
+import jellyfinWebhookRoute from '@server/routes/jellyfin-webhook';
 import plexWebhookRoute from '@server/routes/plex-webhook';
 import { sanitizeErrorMessage } from '@server/utils/errorResponse';
 import restartFlag from '@server/utils/restartFlag';
@@ -229,6 +230,7 @@ app
     });
     // Plex webhook — must be before CSRF and OpenAPI validator (unauthenticated, multipart)
     server.use('/plex-webhook', plexWebhookRoute);
+    server.use('/jellyfin-webhook', jellyfinWebhookRoute);
 
     if (settings.main.csrfProtection) {
       server.use(

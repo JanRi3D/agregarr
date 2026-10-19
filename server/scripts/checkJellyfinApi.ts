@@ -35,6 +35,33 @@ const routes: Partial<Record<string, (call: Call) => unknown>> = {
     { Name: 'Music', ItemId: 'lib-music', CollectionType: 'music' },
   ],
   'GET /Items': ({ query }) => {
+    if (query.get('Ids') === 'movie-ph') {
+      const played = query.get('userId') === 'u1';
+      return {
+        Items: [{ Id: 'movie-ph', UserData: { Played: played } }],
+        TotalRecordCount: 1,
+      };
+    }
+    if (query.get('SortBy') === 'DateLastContentAdded') {
+      return {
+        Items: [
+          {
+            Id: 'show-1',
+            Name: 'Old Show',
+            Type: 'Series',
+            DateCreated: '2020-01-01T00:00:00Z',
+            DateLastMediaAdded: new Date().toISOString(),
+          },
+          {
+            Id: 'show-2',
+            Name: 'Stale Show',
+            Type: 'Series',
+            DateCreated: '2020-01-01T00:00:00Z',
+          },
+        ],
+        TotalRecordCount: 2,
+      };
+    }
     if (query.get('SearchTerm') === 'matrix') {
       return {
         Items: [
@@ -87,6 +114,20 @@ const routes: Partial<Record<string, (call: Call) => unknown>> = {
     return { Items: [], TotalRecordCount: 0 };
   },
   'GET /Items/Filters': () => ({ Tags: ['Overlay'] }),
+  'GET /Items/show-1': () => ({ Id: 'show-1', Name: 'Show', Type: 'Series' }),
+  'GET /Items/movie-ph': () => ({
+    Id: 'movie-ph',
+    Name: 'Soon',
+    Type: 'Movie',
+    Tags: ['keep'],
+    LockData: false,
+    Path: '/movies/Soon (2030) [tmdbid-9]/Soon (2030) [tmdbid-9] {tmdb-9} {edition-Trailer}.mp4',
+  }),
+  'POST /Items/movie-ph': () => '',
+  'POST /Items/movie-ph/RemoteImages/Download': () => '',
+  'POST /Items/lib-movies/Refresh': () => '',
+  'GET /Users': () => [{ Id: 'u1' }, { Id: 'u2' }],
+  'DELETE /UserPlayedItems/movie-ph': () => '',
   'GET /Items/jf-matrix/Images/Primary': () => 'image-bytes',
   'DELETE /Items/col-2': () => '',
   'GET /Items/col-1': () => ({
@@ -260,6 +301,109 @@ const main = async () => {
     jellyfin.getImage('/Items/x/Images/../../System/Configuration'),
     /Not a Jellyfin image path/
   );
+
+  // Placeholder movies expose the file's {edition-X} as Plex's editionTitle
+  const placeholder = await jellyfin.getMetadata('movie-ph');
+  assert.strictEqual(
+    (placeholder as { editionTitle?: string }).editionTitle,
+    'Trailer'
+  );
+  assert.match(
+    placeholder.Media[0].Part?.[0].file ?? '',
+    /\{edition-Trailer\}\.mp4$/
+  );
+
+  // Shows come with their seasons when asked, for Season 00 detection
+  const show = await jellyfin.getMetadata('show-1', { includeChildren: true });
+  assert.deepStrictEqual(
+    show.Children?.Metadata?.map((child) => child.index),
+    [1]
+  );
+
+  // Shows count as recently added when an episode was added
+  const recentShows = await jellyfin.getRecentlyAdded(
+    'lib-tv',
+    { addedAt: Date.now() - 60000 },
+    'show'
+  );
+  assert.deepStrictEqual(
+    recentShows.map((item) => item.ratingKey),
+    ['show-1']
+  );
+
+  // Item labels are tags; the item's own metadata lock is left alone
+  await jellyfin.addLabelToItem('movie-ph', 'trailer-placeholder');
+  const tagged = JSON.parse(calls[calls.length - 1].body);
+  assert.deepStrictEqual(tagged.Tags, ['keep', 'trailer-placeholder']);
+  assert.strictEqual(tagged.LockData, false);
+
+  // Title fixes lock the item so Jellyfin doesn't rename it back
+  await jellyfin.updateItemTitle('movie-ph', 'Trailer (Placeholder)');
+  const retitled = JSON.parse(calls[calls.length - 1].body);
+  assert.deepStrictEqual(
+    { name: retitled.Name, lock: retitled.LockData },
+    { name: 'Trailer (Placeholder)', lock: true }
+  );
+
+  // Posters from URLs are downloaded by Jellyfin itself
+  await jellyfin.uploadPosterFromUrl('movie-ph', 'https://img/x.jpg');
+  const remote = calls[calls.length - 1];
+  assert.strictEqual(remote.path, '/Items/movie-ph/RemoteImages/Download');
+  assert.strictEqual(remote.query.get('ImageUrl'), 'https://img/x.jpg');
+
+  // Library scans run like the UI's "Scan library", so new files get metadata
+  await jellyfin.scanLibrary('lib-movies');
+  assert.strictEqual(
+    calls[calls.length - 1].query.get('MetadataRefreshMode'),
+    'Default'
+  );
+
+  // Played placeholders are reset only for users who played them
+  assert.strictEqual(await jellyfin.resetPlayedState(['movie-ph']), 1);
+  const unplayed = calls.filter((c) => c.method === 'DELETE').pop() as Call;
+  assert.strictEqual(unplayed.path, '/UserPlayedItems/movie-ph');
+  assert.strictEqual(unplayed.query.get('userId'), 'u1');
+
+  // Jellyfin placeholders carry provider ids in the folder name, and the TV
+  // file isn't named like a trailer extra
+  const { getSettings } = await import('@server/lib/settings');
+  getSettings().main.mediaServerType = 'jellyfin';
+  const { createPlaceholder } = await import(
+    '@server/lib/placeholders/placeholderManager'
+  );
+  const libraryRoot = path.join(process.env.CONFIG_DIRECTORY ?? '', 'lib');
+  const trailer = () => {
+    const file = path.join(libraryRoot, `trailer-${Math.random()}.mp4`);
+    fs.mkdirSync(libraryRoot, { recursive: true });
+    fs.writeFileSync(file, '');
+    return file;
+  };
+  const movieResult = await createPlaceholder({
+    tmdbId: 9,
+    title: 'Soon',
+    year: 2030,
+    mediaType: 'movie',
+    libraryPath: libraryRoot,
+    trailerPath: trailer(),
+  });
+  assert.match(
+    movieResult.placeholderPath,
+    /Soon \(2030\) \[tmdbid-9\][/\\]Soon \(2030\) \[tmdbid-9\] \{tmdb-9\} \{edition-Trailer\}\.mp4$/
+  );
+  const tvResult = await createPlaceholder({
+    tmdbId: 7,
+    tvdbId: 70,
+    title: 'Later',
+    year: 2031,
+    mediaType: 'tv',
+    libraryPath: libraryRoot,
+    trailerPath: trailer(),
+  });
+  assert.match(
+    tvResult.placeholderPath,
+    /Later \(2031\) \[tvdbid-70\][/\\]Season 00[/\\]S00E00 - Trailer \(Placeholder\)\.mp4$/
+  );
+  getSettings().main.mediaServerType = 'plex';
 
   // Missing collections resolve to null instead of throwing
   assert.strictEqual(await jellyfin.getCollectionMetadata('gone'), null);

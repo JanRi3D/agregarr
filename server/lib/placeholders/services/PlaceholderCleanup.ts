@@ -368,6 +368,9 @@ export async function cleanupOrphanedPlaceholderFiles(): Promise<number> {
           }
         } else if (libraryInfo.type === 'tv') {
           // Scan TV library for orphaned files
+          const { TV_PLACEHOLDER_FILENAMES } = await import(
+            '@server/lib/placeholders/placeholderManager'
+          );
           const showFolders = await fs.readdir(libraryInfo.path);
 
           for (const showFolder of showFolders) {
@@ -388,7 +391,7 @@ export async function cleanupOrphanedPlaceholderFiles(): Promise<number> {
                 const files = await fs.readdir(seasonPath);
                 for (const file of files) {
                   // Check if this is a placeholder file (S00E00.Trailer.mp4)
-                  if (file !== 'S00E00.Trailer.mp4') continue;
+                  if (!TV_PLACEHOLDER_FILENAMES.includes(file)) continue;
 
                   const filePath = path.join(seasonPath, file);
                   const relativePath = path.join(

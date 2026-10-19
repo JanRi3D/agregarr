@@ -1854,7 +1854,6 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
         if (franchiseData.franchisePosterPath) {
           try {
             const tmdbPosterUrl = `https://image.tmdb.org/t/p/original${franchiseData.franchisePosterPath}`;
-            const posterManager = plexClient['posterManager'];
 
             logger.debug(
               `Uploading TMDB franchise poster for ${collectionName}`,
@@ -1865,11 +1864,11 @@ export class TmdbCollectionSync extends BaseCollectionSync<'tmdb'> {
               }
             );
 
-            await posterManager.uploadPosterFromUrl(
+            await plexClient.uploadPosterFromUrl(
               collectionRatingKey,
               tmdbPosterUrl
             );
-            await posterManager.lockPoster(collectionRatingKey);
+            await plexClient.lockPoster(collectionRatingKey);
 
             logger.info(
               `Successfully uploaded TMDB franchise poster for ${collectionName}`,

@@ -169,11 +169,7 @@ overlayTestRouter.post('/', async (req, res) => {
     const isPlaceholder =
       await placeholderContextService.isPlaceholderItemAsync(
         plexMetadata,
-        plexApi['plexClient'] as {
-          query: (path: string) => Promise<{
-            MediaContainer?: { Directory?: unknown[]; Metadata?: unknown[] };
-          }>;
-        }
+        plexApi
       );
 
     logger.debug('Placeholder detection result', {

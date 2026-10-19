@@ -1,3 +1,4 @@
+import type PlexAPI from '@server/api/plexapi';
 import RadarrAPI from '@server/api/servarr/radarr';
 import SonarrAPI from '@server/api/servarr/sonarr';
 import TheMovieDb from '@server/api/themoviedb';
@@ -232,11 +233,7 @@ export class PlaceholderContextService {
       leafCount?: number;
       ratingKey?: string;
     },
-    plexApi?: {
-      query: (path: string) => Promise<{
-        MediaContainer?: { Directory?: unknown[]; Metadata?: unknown[] };
-      }>;
-    }
+    plexApi?: Pick<PlexAPI, 'getChildrenMetadata'>
   ): Promise<boolean> {
     // Phase 1: Quick check using basic metadata
     if (plexMetadata.type === 'movie') {
@@ -314,26 +311,9 @@ export class PlaceholderContextService {
             leafCount,
           });
 
-          const response = await plexApi.query(
-            `/library/metadata/${plexMetadata.ratingKey}/children`
+          const seasons = await plexApi.getChildrenMetadata(
+            plexMetadata.ratingKey
           );
-
-          logger.debug('Placeholder detection - raw API response', {
-            label: 'PlaceholderContextService',
-            ratingKey: plexMetadata.ratingKey,
-            hasMediaContainer: !!response?.MediaContainer,
-            hasDirectory: !!response?.MediaContainer?.Directory,
-            hasMetadata: !!response?.MediaContainer?.Metadata,
-            responseKeys: Object.keys(response || {}),
-            mediaContainerKeys: Object.keys(response?.MediaContainer || {}),
-          });
-
-          // Seasons may be in Metadata or Directory depending on Plex version/endpoint
-          const seasons = (response?.MediaContainer?.Metadata ||
-            response?.MediaContainer?.Directory ||
-            []) as {
-            index?: number;
-          }[];
 
           logger.debug('Placeholder detection - seasons found', {
             label: 'PlaceholderContextService',
