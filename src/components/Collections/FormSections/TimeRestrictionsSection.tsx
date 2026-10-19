@@ -1,3 +1,4 @@
+import useSettings from '@app/hooks/useSettings';
 import type {
   CollectionFormConfig,
   CustomSyncSchedule,
@@ -95,6 +96,7 @@ const TimeRestrictionsSection = ({
   isPreExisting = false,
 }: TimeRestrictionsSectionProps) => {
   const intl = useIntl();
+  const { currentSettings } = useSettings();
 
   const timeRestriction: TimeRestriction = values.timeRestriction
     ? {
@@ -246,7 +248,8 @@ const TimeRestrictionsSection = ({
       )}
 
       {/* Inactive Visibility Settings - only show when not always active AND not removing from Plex */}
-      {!timeRestriction.alwaysActive &&
+      {currentSettings.mediaServerType !== 'jellyfin' &&
+        !timeRestriction.alwaysActive &&
         !timeRestriction.removeFromPlexWhenInactive && (
           <div className="mt-4 rounded-md bg-stone-800 p-4">
             <VisibilitySection

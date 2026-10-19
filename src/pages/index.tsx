@@ -1,6 +1,7 @@
 import HomeCollectionsView from '@app/components/Collections/Views/Home';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
+import usePlexOnlyRoute from '@app/hooks/usePlexOnlyRoute';
 import { useUser } from '@app/hooks/useUser';
 import type { NextPage } from 'next';
 import { defineMessages, useIntl } from 'react-intl';
@@ -14,8 +15,9 @@ const messages = defineMessages({
 const Index: NextPage = () => {
   const intl = useIntl();
   const { user } = useUser();
+  const isJellyfin = usePlexOnlyRoute('/library');
 
-  if (!user) {
+  if (!user || isJellyfin) {
     return <LoadingSpinner />;
   }
 

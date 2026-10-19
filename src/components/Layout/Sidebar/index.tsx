@@ -1,5 +1,6 @@
 import VersionStatus from '@app/components/Layout/VersionStatus';
 import useClickOutside from '@app/hooks/useClickOutside';
+import useSettings from '@app/hooks/useSettings';
 import type { Permission } from '@app/hooks/useUser';
 import { useUser } from '@app/hooks/useUser';
 import { Transition } from '@headlessui/react';
@@ -111,6 +112,15 @@ const Sidebar = ({
   const intl = useIntl();
   useUser(); // hasPermission removed - not used in simplified sidebar
   useClickOutside(navRef, () => setClosed());
+  const { currentSettings } = useSettings();
+  // Home and Recommended manage Plex hubs, which Jellyfin doesn't have
+  const links =
+    currentSettings.mediaServerType === 'jellyfin'
+      ? SidebarLinks.filter(
+          (link) =>
+            link.messagesKey !== 'home' && link.messagesKey !== 'recommended'
+        )
+      : SidebarLinks;
 
   return (
     <>
@@ -162,7 +172,7 @@ const Sidebar = ({
                       </span>
                     </div>
                     <nav className="mt-16 flex-1 space-y-4 px-4">
-                      {SidebarLinks.map((sidebarLink) => {
+                      {links.map((sidebarLink) => {
                         return (
                           <Link
                             key={`mobile-${sidebarLink.messagesKey}`}
@@ -247,7 +257,7 @@ const Sidebar = ({
                 </span>
               </div>
               <nav className="mt-16 flex-1 space-y-4 px-4">
-                {SidebarLinks.map((sidebarLink) => {
+                {links.map((sidebarLink) => {
                   return (
                     <Link
                       key={`desktop-${sidebarLink.messagesKey}`}

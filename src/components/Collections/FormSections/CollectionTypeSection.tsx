@@ -1,3 +1,4 @@
+import useSettings from '@app/hooks/useSettings';
 import type { CollectionFormConfig } from '@app/types/collections';
 import { validateApiKeysForCollectionType } from '@app/utils/apiKeyValidation';
 import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline';
@@ -74,6 +75,7 @@ const CollectionTypeSection = ({
   getTemplatePresets,
 }: CollectionTypeSectionProps) => {
   const intl = useIntl();
+  const { currentSettings } = useSettings();
 
   // Fetch API settings for validation
   const { data: mainSettings } = useSWR<MainSettings>('/api/v1/settings/main');
@@ -135,7 +137,12 @@ const CollectionTypeSection = ({
     { value: 'comingsoon', label: 'Coming Soon' },
     { value: 'filtered_hub', label: 'Filtered Plex Hub' },
     { value: 'multi-source', label: 'Multiple Sources' },
-  ];
+  ].filter(
+    // Plex library scans, smart hubs and placeholders don't exist on Jellyfin
+    (type) =>
+      currentSettings.mediaServerType !== 'jellyfin' ||
+      !['plex', 'filtered_hub', 'comingsoon'].includes(type.value)
+  );
 
   const getSubtypeOptions = (type: string): SubtypeOption[] => {
     switch (type) {

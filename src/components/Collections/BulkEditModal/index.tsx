@@ -1,5 +1,6 @@
 import Button from '@app/components/Common/Button';
 import Modal from '@app/components/Common/Modal';
+import useSettings from '@app/hooks/useSettings';
 import type {
   CollectionFormConfig,
   CollectionSortOrder,
@@ -132,6 +133,7 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
   onSave,
 }) => {
   const intl = useIntl();
+  const { currentSettings } = useSettings();
   const { addToast } = useToasts();
 
   // Selection state
@@ -444,6 +446,18 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({
       'libraryRecommended',
       'randomizeHomeOrder',
     ];
+
+    // Hubs, smart collections and placeholders are Plex-only
+    if (
+      currentSettings.mediaServerType === 'jellyfin' &&
+      [
+        ...commonFields,
+        'showUnwatchedOnly',
+        'createPlaceholdersForMissing',
+      ].includes(field)
+    ) {
+      return false;
+    }
 
     if (commonFields.includes(field)) {
       return true;

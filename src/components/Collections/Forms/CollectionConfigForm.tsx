@@ -1,5 +1,6 @@
 import Alert from '@app/components/Common/Alert';
 import Modal from '@app/components/Common/Modal';
+import useSettings from '@app/hooks/useSettings';
 import globalMessages from '@app/i18n/globalMessages';
 import type {
   CollectionConfigFormProps,
@@ -282,6 +283,9 @@ const CollectionFormConfigForm = ({
 }: CollectionConfigFormProps) => {
   const intl = useIntl();
   const { addToast } = useToasts();
+  // Jellyfin has no hubs, smart collections, themes, overlays or placeholders
+  const isJellyfin =
+    useSettings().currentSettings.mediaServerType === 'jellyfin';
 
   // Get current user data which includes Plex Pass status
   const { data: currentUser } = useSWR('/api/v1/auth/me');
@@ -3244,59 +3248,66 @@ const CollectionFormConfigForm = ({
                               })()}
 
                             {/* Collection Visibility */}
-                            <div className="form-row">
-                              <div className="text-label">
-                                {intl.formatMessage(messages.visibility)}
-                              </div>
-                              <div className="form-input-area">
-                                <VisibilitySection
-                                  values={typedValues as CollectionFormConfig}
-                                  setFieldValue={setFieldValue}
-                                  isEnhancedForm={false}
-                                  isDefaultPlexHub={isHub}
-                                  restrictToLibraryOnly={
-                                    (values.type === 'tmdb' &&
-                                      values.subtype === 'auto_franchise') ||
-                                    (values.type === 'plex' &&
-                                      (values.subtype === 'directors' ||
-                                        values.subtype === 'actors'))
-                                  }
-                                  restrictToServerOwnerOnly={
-                                    values.type === 'overseerr' &&
-                                    values.subtype === 'server_owner'
-                                  }
-                                  restrictUsersOnly={
-                                    values.type === 'overseerr' &&
-                                    values.subtype === 'users'
-                                  }
-                                />
-                              </div>
-                            </div>
+                            {!isJellyfin && (
+                              <>
+                                <div className="form-row">
+                                  <div className="text-label">
+                                    {intl.formatMessage(messages.visibility)}
+                                  </div>
+                                  <div className="form-input-area">
+                                    <VisibilitySection
+                                      values={
+                                        typedValues as CollectionFormConfig
+                                      }
+                                      setFieldValue={setFieldValue}
+                                      isEnhancedForm={false}
+                                      isDefaultPlexHub={isHub}
+                                      restrictToLibraryOnly={
+                                        (values.type === 'tmdb' &&
+                                          values.subtype ===
+                                            'auto_franchise') ||
+                                        (values.type === 'plex' &&
+                                          (values.subtype === 'directors' ||
+                                            values.subtype === 'actors'))
+                                      }
+                                      restrictToServerOwnerOnly={
+                                        values.type === 'overseerr' &&
+                                        values.subtype === 'server_owner'
+                                      }
+                                      restrictUsersOnly={
+                                        values.type === 'overseerr' &&
+                                        values.subtype === 'users'
+                                      }
+                                    />
+                                  </div>
+                                </div>
 
-                            {/* Randomize Home Order */}
-                            <div className="form-input-area">
-                              <div className="flex items-center">
-                                <Field
-                                  type="checkbox"
-                                  id="randomizeHomeOrder"
-                                  name="randomizeHomeOrder"
-                                  className="form-checkbox"
-                                />
-                                <label
-                                  htmlFor="randomizeHomeOrder"
-                                  className="ml-2 text-sm text-gray-300"
-                                >
-                                  {intl.formatMessage(
-                                    messages.shufflePositionLabel
-                                  )}
-                                </label>
-                              </div>
-                              <div className="label-tip mt-2">
-                                {intl.formatMessage(
-                                  messages.shufflePositionHelp
-                                )}
-                              </div>
-                            </div>
+                                {/* Randomize Home Order */}
+                                <div className="form-input-area">
+                                  <div className="flex items-center">
+                                    <Field
+                                      type="checkbox"
+                                      id="randomizeHomeOrder"
+                                      name="randomizeHomeOrder"
+                                      className="form-checkbox"
+                                    />
+                                    <label
+                                      htmlFor="randomizeHomeOrder"
+                                      className="ml-2 text-sm text-gray-300"
+                                    >
+                                      {intl.formatMessage(
+                                        messages.shufflePositionLabel
+                                      )}
+                                    </label>
+                                  </div>
+                                  <div className="label-tip mt-2">
+                                    {intl.formatMessage(
+                                      messages.shufflePositionHelp
+                                    )}
+                                  </div>
+                                </div>
+                              </>
+                            )}
 
                             {/* Max Items */}
                             <div className="form-row">
@@ -3339,7 +3350,8 @@ const CollectionFormConfigForm = ({
 
                             {/* Smart Collection - Show Unwatched Only */}
                             {/* Hide for: recently_added (already smart), and tmdb auto_franchise (multi-collection) */}
-                            {values.type !== 'filtered_hub' &&
+                            {!isJellyfin &&
+                              values.type !== 'filtered_hub' &&
                               !(
                                 (values.type === 'tmdb' &&
                                   values.subtype === 'auto_franchise') ||
@@ -3555,42 +3567,44 @@ const CollectionFormConfigForm = ({
                                   </div>
 
                                   {/* Enable Theme Checkbox */}
-                                  <div className="mb-4">
-                                    <div className="flex items-center">
-                                      <Field
-                                        type="checkbox"
-                                        id="enableCustomTheme"
-                                        name="enableCustomTheme"
-                                        className="form-checkbox"
-                                      />
-                                      <label
-                                        htmlFor="enableCustomTheme"
-                                        className="ml-2 text-sm text-gray-300"
-                                      >
-                                        {intl.formatMessage(
-                                          messages.enableCustomTheme
+                                  {!isJellyfin && (
+                                    <div className="mb-4">
+                                      <div className="flex items-center">
+                                        <Field
+                                          type="checkbox"
+                                          id="enableCustomTheme"
+                                          name="enableCustomTheme"
+                                          className="form-checkbox"
+                                        />
+                                        <label
+                                          htmlFor="enableCustomTheme"
+                                          className="ml-2 text-sm text-gray-300"
+                                        >
+                                          {intl.formatMessage(
+                                            messages.enableCustomTheme
+                                          )}
+                                        </label>
+                                      </div>
+                                      {values.enableCustomTheme &&
+                                        (values.libraryIds?.length > 0 ||
+                                          values.libraryId) && (
+                                          <div className="mt-3">
+                                            <ThemeUploadSection
+                                              values={
+                                                typedValues as CollectionFormConfig
+                                              }
+                                              setFieldValue={setFieldValue}
+                                              addToast={addToast}
+                                              fieldId="customTheme"
+                                              libraries={libraries}
+                                              selectedLibraryIds={
+                                                values.libraryIds || []
+                                              }
+                                            />
+                                          </div>
                                         )}
-                                      </label>
                                     </div>
-                                    {values.enableCustomTheme &&
-                                      (values.libraryIds?.length > 0 ||
-                                        values.libraryId) && (
-                                        <div className="mt-3">
-                                          <ThemeUploadSection
-                                            values={
-                                              typedValues as CollectionFormConfig
-                                            }
-                                            setFieldValue={setFieldValue}
-                                            addToast={addToast}
-                                            fieldId="customTheme"
-                                            libraries={libraries}
-                                            selectedLibraryIds={
-                                              values.libraryIds || []
-                                            }
-                                          />
-                                        </div>
-                                      )}
-                                  </div>
+                                  )}
                                 </div>
                               </div>
                             )}
@@ -3646,7 +3660,8 @@ const CollectionFormConfigForm = ({
 
                             {/* Placeholder Creation - show for external sources that can have missing items */}
                             {/* Hide for: overseerr, tautulli, recently_added, plex directors/actors */}
-                            {typedValues.type &&
+                            {!isJellyfin &&
+                              typedValues.type &&
                               typedValues.type !== 'overseerr' &&
                               typedValues.type !== 'tautulli' &&
                               typedValues.type !== 'filtered_hub' &&
