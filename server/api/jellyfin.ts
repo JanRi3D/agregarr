@@ -370,6 +370,7 @@ const imageContentType = (file: string) =>
 /** Jellyfin REST client (Jellyfin 10.9+). Collections are Jellyfin BoxSets. */
 class JellyfinAPI implements PlexCompatible {
   private axios: AxiosInstance;
+  private readUserId?: Promise<string | undefined>;
   private insertionOrder?: Promise<boolean>;
   private adminUserId?: Promise<string | undefined>;
 
@@ -379,6 +380,32 @@ class JellyfinAPI implements PlexCompatible {
       timeout: 30000,
       headers: { Authorization: authHeader(settings.apiKey) },
     });
+
+    // Jellyfin 12 rejects single-item reads made with an API key alone and
+    // returns collection contents empty, so read items as an administrator
+    this.axios.interceptors.request.use(async (config) => {
+      if (
+        (config.method ?? 'get') === 'get' &&
+        /^\/(Items|Shows)\b/.test(config.url ?? '') &&
+        !config.params?.userId
+      ) {
+        config.params = {
+          ...config.params,
+          userId: await this.getReadUserId(),
+        };
+      }
+      return config;
+    });
+  }
+
+  private getReadUserId(): Promise<string | undefined> {
+    this.readUserId ??= this.getUsers()
+      .then(
+        (users) =>
+          (users.find((user) => user.Policy?.IsAdministrator) ?? users[0])?.Id
+      )
+      .catch(() => undefined);
+    return this.readUserId;
   }
 
   /** Sign in a Jellyfin user by username/password (no API key needed). */

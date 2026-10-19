@@ -733,6 +733,13 @@ const main = async () => {
   // Missing collections resolve to null instead of throwing
   assert.strictEqual(await jellyfin.getCollectionMetadata('gone'), null);
 
+  // Item reads always carry a user (Jellyfin 12 needs one with an API key)
+  const itemReads = calls.filter(
+    (c) => c.method === 'GET' && /^\/(Items|Shows)\b/.test(c.path)
+  );
+  assert.ok(itemReads.length > 0);
+  assert.ok(itemReads.every((c) => c.query.get('userId')));
+
   server.close();
   // eslint-disable-next-line no-console
   console.log('Jellyfin API checks passed');
