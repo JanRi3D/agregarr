@@ -12,6 +12,7 @@
  * collections and want clean hub views without placeholders.
  */
 
+import JellyfinAPI from '@server/api/jellyfin';
 import type PlexAPI from '@server/api/plexapi';
 import { BaseCollectionSync } from '@server/lib/collections/core/BaseCollectionSync';
 import {
@@ -201,10 +202,12 @@ export class FilteredHubCollectionSync extends BaseCollectionSync<'filtered_hub'
     // Define custom label for this collection
     const customLabel = `Agregarr-filtered_hub-${config.id}`;
 
-    // Filter collections to only those in the target library
-    const libraryCollections = allCollections.filter(
-      (col) => col.libraryKey === config.libraryId
-    );
+    // Filter collections to only those in the target library (Jellyfin
+    // collections aren't in one; the label is per config anyway)
+    const jellyfin = plexClient instanceof JellyfinAPI;
+    const libraryCollections = jellyfin
+      ? allCollections
+      : allCollections.filter((col) => col.libraryKey === config.libraryId);
 
     // First try using stored collectionRatingKey from config
     let existingCollection: PlexCollection | undefined;
@@ -231,7 +234,38 @@ export class FilteredHubCollectionSync extends BaseCollectionSync<'filtered_hub'
     let result: SyncResult;
     let collectionRatingKey: string;
 
-    if (existingCollection) {
+    if (jellyfin) {
+      // Jellyfin has no smart collections: refill a collection on every sync
+      const ratingKey =
+        existingCollection?.ratingKey ??
+        (await plexClient.createEmptyCollection(
+          collectionName,
+          config.libraryId,
+          mediaType
+        ));
+      if (!ratingKey) {
+        throw this.createSyncError(
+          CollectionSyncErrorType.COLLECTION_ERROR,
+          `Failed to create filtered hub collection (subtype: ${subtype})`
+        );
+      }
+      collectionRatingKey = ratingKey;
+      await plexClient.updateCollectionContents(
+        collectionRatingKey,
+        await plexClient.getFilteredHubItems(
+          config.libraryId,
+          mediaType,
+          subtype,
+          // ponytail: smart collections can be unlimited; a snapshot is
+          // re-added on every change, so cap it
+          config.maxItems || 100
+        )
+      );
+      processedCollectionKeys?.add(collectionRatingKey);
+      result = existingCollection
+        ? { created: 0, updated: 1 }
+        : { created: 1, updated: 0 };
+    } else if (existingCollection) {
       logger.info('Filtered hub smart collection already exists', {
         label: 'Filtered Hub Collections',
         collectionName,

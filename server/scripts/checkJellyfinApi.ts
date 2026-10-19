@@ -36,6 +36,38 @@ const routes: Partial<Record<string, (call: Call) => unknown>> = {
     { Name: 'Music', ItemId: 'lib-music', CollectionType: 'music' },
   ],
   'GET /Items': ({ query }) => {
+    if (query.get('IncludeItemTypes') === 'Episode' && query.get('SortBy')) {
+      return {
+        Items: [
+          { Id: 'e1', Name: 'New', SeriesId: 's1' },
+          { Id: 'e2', Name: 'Older', SeriesId: 's1' },
+          { Id: 'e3', Name: 'Oldest', SeriesId: 's2' },
+          { Id: 'e4', Name: 'Trailer (Placeholder)', SeriesId: 's3' },
+        ],
+      };
+    }
+    if (query.get('Ids') === 's1,s2') {
+      return {
+        Items: [
+          { Id: 's2', Name: 'Second', Type: 'Series' },
+          { Id: 's1', Name: 'First', Type: 'Series' },
+        ],
+      };
+    }
+    if (query.get('SortBy') === 'DateCreated' && !query.get('Person')) {
+      return {
+        Items: [
+          {
+            Id: 'soon',
+            Name: 'Soon',
+            Type: 'Movie',
+            Path: '/m/Soon {tmdb-9} {edition-Trailer}.mp4',
+          },
+          { Id: 'newest', Name: 'Newest', Type: 'Movie' },
+          { Id: 'older', Name: 'Older', Type: 'Movie' },
+        ],
+      };
+    }
     if (query.get('Ids')?.startsWith('ep1')) {
       return {
         Items: [
@@ -674,6 +706,28 @@ const main = async () => {
   assert.deepStrictEqual(
     watched.map((row) => row.rating_key),
     ['show-b', 'show-a']
+  );
+
+  // Filtered hubs become snapshots: newest first, placeholders left out
+  const recentMovies = await jellyfin.getFilteredHubItems(
+    'lib-movies',
+    'movie',
+    'recently_added',
+    1
+  );
+  assert.deepStrictEqual(
+    recentMovies.map((item) => item.ratingKey),
+    ['newest']
+  );
+  const airedShows = await jellyfin.getFilteredHubItems(
+    'lib-tv',
+    'tv',
+    'recently_released',
+    5
+  );
+  assert.deepStrictEqual(
+    airedShows.map((item) => item.ratingKey),
+    ['s1', 's2']
   );
 
   // Missing collections resolve to null instead of throwing

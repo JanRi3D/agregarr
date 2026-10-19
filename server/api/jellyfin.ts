@@ -1016,6 +1016,79 @@ class JellyfinAPI implements PlexCompatible {
     );
   }
 
+  /**
+   * What a Plex "filtered hub" smart collection would hold, newest first:
+   * recently added items, recently released items (shows by their latest
+   * aired episode) or shows by their latest added episode. Placeholders are
+   * left out as on Plex.
+   */
+  public async getFilteredHubItems(
+    libraryId: string,
+    mediaType: 'movie' | 'tv',
+    subtype:
+      | 'recently_added'
+      | 'recently_released'
+      | 'recently_released_episodes',
+    limit: number
+  ): Promise<PlexLibraryItem[]> {
+    const shows = mediaType === 'tv';
+    const now = new Date().toISOString();
+
+    if (shows && subtype === 'recently_released') {
+      const seriesIds: string[] = [];
+      for (let start = 0; seriesIds.length < limit; start += PAGE_SIZE) {
+        const { data } = await this.axios.get<JellyfinItemsResponse>('/Items', {
+          params: {
+            ParentId: libraryId,
+            Recursive: true,
+            IncludeItemTypes: 'Episode',
+            SortBy: 'PremiereDate',
+            SortOrder: 'Descending',
+            MaxPremiereDate: now,
+            StartIndex: start,
+            Limit: PAGE_SIZE,
+            EnableImages: false,
+          },
+        });
+        for (const episode of data.Items) {
+          if (
+            episode.SeriesId &&
+            episode.Name !== PLACEHOLDER_EPISODE_TITLE &&
+            !seriesIds.includes(episode.SeriesId)
+          ) {
+            seriesIds.push(episode.SeriesId);
+          }
+        }
+        if (data.Items.length < PAGE_SIZE) break;
+      }
+      const series = new Map(
+        (await this.getItemsByIds(seriesIds.slice(0, limit))).map((item) => [
+          item.Id,
+          item,
+        ])
+      );
+      return seriesIds
+        .slice(0, limit)
+        .flatMap((id) => series.get(id) ?? [])
+        .map(toPlexItem);
+    }
+
+    // ponytail: lists the whole library to drop placeholders before the
+    // limit; page with a margin if libraries get too big for that
+    const items = await this.getRealItems(libraryId, shows, {
+      SortBy:
+        subtype === 'recently_added'
+          ? 'DateCreated'
+          : subtype === 'recently_released'
+          ? 'PremiereDate'
+          : 'DateLastContentAdded',
+      SortOrder: 'Descending',
+      Fields: 'ProviderIds,DateCreated,Path,Tags',
+      ...(subtype === 'recently_released' && { MaxPremiereDate: now }),
+    });
+    return items.slice(0, limit).map(toPlexItem);
+  }
+
   /** Directors in a library by number of items, most first. */
   public async getLibraryDirectors(libraryId: string, limit?: number) {
     return this.countPeople(libraryId, 'Director', limit);
