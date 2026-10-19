@@ -2,6 +2,7 @@ import HomeStarIcon from '@app/assets/icons/homeWithStar.svg';
 import LibraryBookmarkIcon from '@app/assets/icons/libraryRecommended.svg';
 import ThreeHomesIcon from '@app/assets/icons/threeHomes.svg';
 import Badge from '@app/components/Common/Badge';
+import useMediaServer from '@app/hooks/useMediaServer';
 import type { CollectionFormConfig } from '@app/types/collections';
 import { formatSyncScheduleBadge } from '@app/utils/collections/collectionUtils';
 import {
@@ -521,7 +522,13 @@ export const SourceSubtypeBadge: React.FC<SourceSubtypeBadgeProps> = ({
   type,
   subtype,
 }) => {
-  const typeLabel = getTypeLabel(type);
+  const { isJellyfin } = useMediaServer();
+  const typeLabel =
+    isJellyfin && type === 'plex'
+      ? 'Jellyfin Library'
+      : isJellyfin && type === 'filtered_hub'
+      ? 'Filtered Library'
+      : getTypeLabel(type);
   const subtypeLabel = getSubtypeLabel(type, subtype);
   const displayText = subtypeLabel
     ? `${typeLabel} - ${subtypeLabel}`

@@ -1,5 +1,6 @@
 import Button from '@app/components/Common/Button';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
+import useMediaServer from '@app/hooks/useMediaServer';
 import {
   CogIcon,
   ExclamationCircleIcon,
@@ -25,6 +26,9 @@ const messages = defineMessages({
   tautulliDescriptionPlayStats:
     'Configure Tautulli in your settings to view play statistics from your Plex server.',
   configureTautulli: 'Configure Tautulli',
+  playbackReportingRequired: 'Playback Reporting Required',
+  playbackReportingDescriptionPlayStats:
+    'Install the Playback Reporting plugin in Jellyfin (Dashboard → Plugins → Catalog) to view play statistics.',
   failedToLoadDashboardStats: 'Failed to load dashboard statistics',
 });
 
@@ -89,6 +93,7 @@ const StatCard = ({
 
 const DashboardStats: React.FC = () => {
   const intl = useIntl();
+  const { isJellyfin } = useMediaServer();
   const { data: dashboardData, error } = useSWR<DashboardData>(
     '/api/v1/dashboard/stats'
   );
@@ -128,17 +133,27 @@ const DashboardStats: React.FC = () => {
         <div className="flex flex-col items-center py-8 text-center">
           <ExclamationCircleIcon className="mb-4 h-12 w-12 text-orange-400" />
           <h4 className="mb-2 text-lg font-semibold text-white">
-            {intl.formatMessage(messages.tautulliRequired)}
+            {intl.formatMessage(
+              isJellyfin
+                ? messages.playbackReportingRequired
+                : messages.tautulliRequired
+            )}
           </h4>
           <p className="mb-6 max-w-md text-gray-400">
-            {intl.formatMessage(messages.tautulliDescriptionPlayStats)}
+            {intl.formatMessage(
+              isJellyfin
+                ? messages.playbackReportingDescriptionPlayStats
+                : messages.tautulliDescriptionPlayStats
+            )}
           </p>
-          <Link href="/settings/sources" passHref>
-            <Button as="a" buttonType="primary">
-              <CogIcon className="mr-2 h-5 w-5" />
-              {intl.formatMessage(messages.configureTautulli)}
-            </Button>
-          </Link>
+          {!isJellyfin && (
+            <Link href="/settings/sources" passHref>
+              <Button as="a" buttonType="primary">
+                <CogIcon className="mr-2 h-5 w-5" />
+                {intl.formatMessage(messages.configureTautulli)}
+              </Button>
+            </Link>
+          )}
         </div>
       </div>
     );

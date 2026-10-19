@@ -169,6 +169,12 @@ const routes: Partial<Record<string, (call: Call) => unknown>> = {
         TotalRecordCount: 1,
       };
     }
+    if (query.get('ParentId') === 'col-stats') {
+      return {
+        Items: [{ Id: 'show-a' }, { Id: 'movie-x' }],
+        TotalRecordCount: 2,
+      };
+    }
     if (query.get('ParentId') === 'col-1') {
       return {
         Items: [...collectionItems].map((Id) => ({ Id, Name: Id })),
@@ -260,15 +266,27 @@ const routes: Partial<Record<string, (call: Call) => unknown>> = {
   'POST /Items/movie-4k/Images/Primary': () => '',
   'DELETE /UserPlayedItems/movie-ph': () => '',
   'POST /Users/u2/Policy': () => '',
-  'POST /user_usage_stats/submit_custom_query': () => ({
-    colums: ['ItemId', 'UserId', 'plays', 'duration', 'last'],
-    results: [
-      ['ep1', 'u1', '2', '100', '2026-10-01 10:00:00'],
-      ['ep2', 'u2', '1', '50', '2026-10-02 10:00:00'],
-      ['ep3', 'u1', '5', '10', '2026-10-03 10:00:00'],
-      ['deleted-episode', 'u1', '9', '9', '2026-10-03 10:00:00'],
-    ],
-  }),
+  'POST /user_usage_stats/submit_custom_query': ({ body }) =>
+    body.includes('ItemType, UserId')
+      ? {
+          // Dashboard query: ItemId, ItemType, UserId, plays, duration
+          results: [
+            ['ep1', 'Episode', 'u1', '2', '100'],
+            ['ep3', 'Episode', 'u2', '1', '50'],
+            ['movie-x', 'Movie', 'u1', '3', '30'],
+            ['gone', 'Movie', 'u2', '4', '40'],
+          ],
+        }
+      : {
+          colums: ['ItemId', 'UserId', 'plays', 'duration', 'last'],
+          results: [
+            ['ep1', 'u1', '2', '100', '2026-10-01 10:00:00'],
+            ['ep2', 'u2', '1', '50', '2026-10-02 10:00:00'],
+            ['ep3', 'u1', '5', '10', '2026-10-03 10:00:00'],
+            ['deleted-episode', 'u1', '9', '9', '2026-10-03 10:00:00'],
+          ],
+        },
+  'GET /Items/col-stats': () => ({ Id: 'col-stats', Name: 'Stats' }),
   'GET /Items/jf-matrix/Images/Primary': () => 'image-bytes',
   'DELETE /Items/col-2': () => '',
   'GET /Items/col-1': () => ({
@@ -707,6 +725,24 @@ const main = async () => {
     watched.map((row) => row.rating_key),
     ['show-b', 'show-a']
   );
+
+  // Dashboard: collection plays include episodes of member series
+  const dashboard = await jellyfin.getDashboardStats(['col-stats'], 7);
+  assert.deepStrictEqual(
+    { movies: dashboard.moviePlays, tv: dashboard.tvPlays },
+    { movies: 7, tv: 3 }
+  );
+  assert.deepStrictEqual(dashboard.collections, [
+    {
+      rating_key: 'col-stats',
+      title: 'Stats',
+      media_type: 'collection',
+      item_count: 2,
+      total_plays: 5,
+      total_duration: 130,
+      user_stats: [{ user_id: 'u1' }],
+    },
+  ]);
 
   // Filtered hubs become snapshots: newest first, placeholders left out
   const recentMovies = await jellyfin.getFilteredHubItems(

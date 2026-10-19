@@ -1,6 +1,7 @@
 import LibraryCollectionsView from '@app/components/Collections/Views/Library';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
+import useMediaServer from '@app/hooks/useMediaServer';
 import { useUser } from '@app/hooks/useUser';
 import type { NextPage } from 'next';
 import { defineMessages, useIntl } from 'react-intl';
@@ -9,11 +10,14 @@ const messages = defineMessages({
   libraryTitle: 'Library',
   libraryDescription:
     'Collections in the Library tab. Ordering in the Library tabs can be independent from the Home/Recommended views.',
+  libraryDescriptionJellyfin:
+    'Collections in the Library tab, in the order they appear in Jellyfin.',
 });
 
 const LibraryPage: NextPage = () => {
   const intl = useIntl();
   const { user } = useUser();
+  const { isJellyfin } = useMediaServer();
 
   if (!user) {
     return <LoadingSpinner />;
@@ -29,7 +33,11 @@ const LibraryPage: NextPage = () => {
           {intl.formatMessage(messages.libraryTitle)}
         </h3>
         <p className="description">
-          {intl.formatMessage(messages.libraryDescription)}
+          {intl.formatMessage(
+            isJellyfin
+              ? messages.libraryDescriptionJellyfin
+              : messages.libraryDescription
+          )}
         </p>
       </div>
 

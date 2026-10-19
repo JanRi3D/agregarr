@@ -6,6 +6,7 @@ import Alert from '@app/components/Common/Alert';
 import Button from '@app/components/Common/Button';
 import { useCollectionReordering } from '@app/hooks/collections/useCollectionReordering';
 import useFirstTimeSetup from '@app/hooks/useFirstTimeSetup';
+import useMediaServer from '@app/hooks/useMediaServer';
 import type {
   CollectionFormConfig,
   CollectionSettingsProps,
@@ -194,6 +195,7 @@ const CollectionSettings = ({
   filterTab,
 }: CollectionSettingsProps) => {
   const intl = useIntl();
+  const { isJellyfin, serverName } = useMediaServer();
   const { addToast } = useToasts();
   const router = useRouter();
   const { mutate: revalidate } = useSWR('/api/v1/settings/plex');
@@ -1844,6 +1846,7 @@ const CollectionSettings = ({
               buttonType="default"
               onClick={() =>
                 discoverPlexHubs({
+                  serverName,
                   localCollectionConfigs,
                   localHubConfigs,
                   localPreExistingConfigs,
@@ -1873,6 +1876,8 @@ const CollectionSettings = ({
               <span>
                 {discoveringHubs
                   ? 'Discovering...'
+                  : isJellyfin
+                  ? 'Discover Existing Collections'
                   : 'Discover Existing Collections & Hubs'}
               </span>
             </Button>

@@ -2,6 +2,7 @@ import Spinner from '@app/assets/spinner.svg';
 import Button from '@app/components/Common/Button';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import { OverlayEditorModal } from '@app/components/OverlayEditor';
+import useMediaServer from '@app/hooks/useMediaServer';
 import {
   ArrowUpTrayIcon,
   BeakerIcon,
@@ -29,7 +30,7 @@ import TestItemModal from './TestItemModal';
 const messages = defineMessages({
   overlaySystemTitle: 'Overlay System',
   overlaySystemDescription:
-    'Create overlay templates and apply them to your Plex library posters',
+    'Create overlay templates and apply them to your {server} library posters',
   templatesTab: 'Overlay Templates',
   librariesTab: 'Library Configuration',
   createOverlayTemplate: 'Create Overlay Template',
@@ -67,6 +68,7 @@ type TabKey = 'templates' | 'libraries';
 
 const OverlaysPageView: React.FC = () => {
   const intl = useIntl();
+  const { serverName } = useMediaServer();
   const router = useRouter();
   const { addToast } = useToasts();
 
@@ -367,7 +369,9 @@ const OverlaysPageView: React.FC = () => {
           {intl.formatMessage(messages.overlaySystemTitle)}
         </h2>
         <p className="mt-1 text-sm text-stone-400">
-          {intl.formatMessage(messages.overlaySystemDescription)}
+          {intl.formatMessage(messages.overlaySystemDescription, {
+            server: serverName,
+          })}
         </p>
       </div>
 

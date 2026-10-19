@@ -9,6 +9,7 @@ import SettingsBadge from '@app/components/Settings/SettingsBadge';
 import type { AvailableLocale } from '@app/context/LanguageContext';
 import { availableLanguages } from '@app/context/LanguageContext';
 import useLocale from '@app/hooks/useLocale';
+import useMediaServer from '@app/hooks/useMediaServer';
 import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
 import { ArrowDownOnSquareIcon } from '@heroicons/react/24/outline';
@@ -54,11 +55,11 @@ const messages = defineMessages({
     'Cache TMDB posters for 7 days to reduce API calls and improve performance (recommended)',
   resetAgregarr: 'Reset',
   resetAgregarrDescription:
-    'Remove all Agregarr collections from Plex and clear all user labels.',
+    'Remove all Agregarr collections from {server} and clear all user labels.',
   resetButton: 'Reset Collections',
   resetButtonConfirm: 'Are you sure?',
   resetWarning:
-    'This action will delete all collections created by Agregarr from your Plex server and clear all Agregarr user labels.',
+    'This action will delete all collections created by Agregarr from your {server} server and clear all Agregarr user labels.',
   resetting: 'Resetting...',
   toastResetSuccess: 'All Agregarr collections have been removed successfully!',
   toastResetFailure: 'Something went wrong while resetting collections.',
@@ -68,6 +69,7 @@ const SettingsMain = () => {
   const { addToast } = useToasts();
   const { hasPermission: userHasPermission } = useUser();
   const intl = useIntl();
+  const { serverName } = useMediaServer();
   const { setLocale } = useLocale();
   const [isResetting, setIsResetting] = useState(false);
   const {
@@ -421,13 +423,15 @@ const SettingsMain = () => {
           {intl.formatMessage(messages.resetAgregarr)}
         </h3>
         <p className="description">
-          {intl.formatMessage(messages.resetAgregarrDescription)}
+          {intl.formatMessage(messages.resetAgregarrDescription, {
+            server: serverName,
+          })}
         </p>
       </div>
       <div className="section">
         <div className="rounded-md border border-yellow-500 bg-yellow-500 bg-opacity-10 p-4">
           <p className="text-sm text-yellow-200">
-            {intl.formatMessage(messages.resetWarning)}
+            {intl.formatMessage(messages.resetWarning, { server: serverName })}
           </p>
         </div>
         <div className="mt-4 flex justify-end">

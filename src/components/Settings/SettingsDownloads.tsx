@@ -61,7 +61,7 @@ const messages = defineMessages({
   saving: 'Saving…',
   placeholderSettings: 'Placeholder Root Folders',
   placeholderSettingsDescription:
-    'Configure root folders for placeholder files for each library. These paths should match the mounted Plex library paths inside the Agregarr container.',
+    'Configure root folders for placeholder files for each library. These paths should match the mounted {server} library paths inside the Agregarr container.',
   libraryPlaceholderFolder: 'Placeholder Folder for {libraryName}',
   libraryPlaceholderFolderTip:
     'Path where placeholder files will be created for this library',
@@ -643,7 +643,9 @@ const SettingsDownloads = ({ onComplete }: SettingsDownloadsProps) => {
             {intl.formatMessage(messages.placeholderSettings)}
           </h3>
           <p className="description">
-            {intl.formatMessage(messages.placeholderSettingsDescription)}
+            {intl.formatMessage(messages.placeholderSettingsDescription, {
+              server: isJellyfin ? 'Jellyfin' : 'Plex',
+            })}
           </p>
         </div>
         <Formik

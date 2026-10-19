@@ -6,6 +6,7 @@ import Modal from '@app/components/Common/Modal';
 import PageTitle from '@app/components/Common/PageTitle';
 import Table from '@app/components/Common/Table';
 import useLocale from '@app/hooks/useLocale';
+import useMediaServer from '@app/hooks/useMediaServer';
 import globalMessages from '@app/i18n/globalMessages';
 import { Transition } from '@headlessui/react';
 import { PlayIcon, StopIcon } from '@heroicons/react/24/outline';
@@ -52,6 +53,8 @@ const messages: { [messageName: string]: MessageDescriptor } = defineMessages({
   'overlay-application': 'Poster Overlay Application',
   'overlay-quick-sync': 'Overlay Quick Sync',
   'watchlist-sync': 'Plex Watchlist Sync',
+  jellyfinCollectionsSync: 'Collections Sync',
+  jellyfinWatchlistSync: 'Watchlist Sync',
   editJobSchedule: 'Modify Job',
   jobScheduleEditSaved: 'Job edited successfully!',
   jobScheduleEditFailed: 'Something went wrong while saving the job.',
@@ -222,8 +225,18 @@ const jobModalReducer = (
   }
 };
 
+// Do nothing on Jellyfin, so they aren't listed there
+const PLEX_ONLY_JOBS = ['plex-refresh-token', 'plex-randomize-home-order'];
+
 const SettingsJobs = () => {
   const intl = useIntl();
+  const { isJellyfin } = useMediaServer();
+  const jobMessage = (id: Job['id']) =>
+    isJellyfin && id === 'plex-collections-sync'
+      ? messages.jellyfinCollectionsSync
+      : isJellyfin && id === 'watchlist-sync'
+      ? messages.jellyfinWatchlistSync
+      : messages[id] ?? messages.unknownJob;
   const { locale } = useLocale();
   const { addToast } = useToasts();
   const {
@@ -262,7 +275,7 @@ const SettingsJobs = () => {
 
     addToast(
       intl.formatMessage(messages.jobstarted, {
-        jobname: intl.formatMessage(messages[job.id] ?? messages.unknownJob),
+        jobname: intl.formatMessage(jobMessage(job.id)),
       }),
       {
         appearance: 'success',
@@ -276,7 +289,7 @@ const SettingsJobs = () => {
     await axios.post(`/api/v1/settings/jobs/${job.id}/cancel`);
     addToast(
       intl.formatMessage(messages.jobcancelled, {
-        jobname: intl.formatMessage(messages[job.id] ?? messages.unknownJob),
+        jobname: intl.formatMessage(jobMessage(job.id)),
       }),
       {
         appearance: 'error',
@@ -599,138 +612,142 @@ const SettingsJobs = () => {
             </tr>
           </thead>
           <Table.TBody>
-            {data?.map((job) => (
-              <tr key={`job-list-${job.id}`}>
-                <Table.TD>
-                  <div className="flex items-center text-sm leading-5 text-white">
-                    <span>
-                      {intl.formatMessage(
-                        messages[job.id] ?? messages.unknownJob
-                      )}
-                    </span>
-                    {job.running && <Spinner className="ml-2 h-5 w-5" />}
-                  </div>
-                </Table.TD>
-                <Table.TD>
-                  <Badge
-                    badgeType={job.type === 'process' ? 'primary' : 'warning'}
-                    className="uppercase"
-                  >
-                    {job.type === 'process'
-                      ? intl.formatMessage(messages.process)
-                      : intl.formatMessage(messages.command)}
-                  </Badge>
-                </Table.TD>
-                <Table.TD>
-                  {(() => {
-                    const secondsUntilNext = Math.floor(
-                      (new Date(job.nextExecutionTime).getTime() - Date.now()) /
-                        1000
-                    );
-                    const minutesUntilNext = secondsUntilNext / 60;
-                    const hoursUntilNext = secondsUntilNext / 3600;
-
-                    // Show minutes for less than 1 hour, hours for up to 48 hours, then switch to days
-                    return (
-                      <div className="text-sm leading-5 text-white">
-                        {hoursUntilNext < 1 ? (
-                          <FormattedRelativeTime
-                            value={Math.floor(minutesUntilNext)}
-                            updateIntervalInSeconds={10}
-                            numeric="auto"
-                            unit="minute"
-                          />
-                        ) : hoursUntilNext <= 48 ? (
-                          <FormattedRelativeTime
-                            value={Math.floor(hoursUntilNext)}
-                            updateIntervalInSeconds={60}
-                            numeric="auto"
-                            unit="hour"
-                          />
-                        ) : (
-                          <FormattedRelativeTime
-                            value={Math.floor(secondsUntilNext / 86400)}
-                            updateIntervalInSeconds={3600}
-                            numeric="auto"
-                            unit="day"
-                          />
-                        )}
-                      </div>
-                    );
-                  })()}
-                  {job.followingExecutionTime &&
-                    (() => {
-                      const secondsUntil = Math.floor(
-                        (new Date(job.followingExecutionTime).getTime() -
+            {data
+              ?.filter(
+                (job) => !(isJellyfin && PLEX_ONLY_JOBS.includes(job.id))
+              )
+              .map((job) => (
+                <tr key={`job-list-${job.id}`}>
+                  <Table.TD>
+                    <div className="flex items-center text-sm leading-5 text-white">
+                      <span>{intl.formatMessage(jobMessage(job.id))}</span>
+                      {job.running && <Spinner className="ml-2 h-5 w-5" />}
+                    </div>
+                  </Table.TD>
+                  <Table.TD>
+                    <Badge
+                      badgeType={job.type === 'process' ? 'primary' : 'warning'}
+                      className="uppercase"
+                    >
+                      {job.type === 'process'
+                        ? intl.formatMessage(messages.process)
+                        : intl.formatMessage(messages.command)}
+                    </Badge>
+                  </Table.TD>
+                  <Table.TD>
+                    {(() => {
+                      const secondsUntilNext = Math.floor(
+                        (new Date(job.nextExecutionTime).getTime() -
                           Date.now()) /
                           1000
                       );
-                      const minutesUntil = Math.floor(secondsUntil / 60);
-                      const hoursUntil = Math.floor(secondsUntil / 3600);
-                      const daysUntil = Math.floor(secondsUntil / 86400);
+                      const minutesUntilNext = secondsUntilNext / 60;
+                      const hoursUntilNext = secondsUntilNext / 3600;
 
                       // Show minutes for less than 1 hour, hours for up to 48 hours, then switch to days
-                      if (hoursUntil < 1) {
-                        return (
-                          <div className="text-xs leading-4 text-gray-400">
-                            {intl.formatMessage(
-                              messages.followingExecutionMinutes,
-                              {
-                                count: minutesUntil,
-                              }
-                            )}
-                          </div>
-                        );
-                      } else if (hoursUntil <= 48) {
-                        return (
-                          <div className="text-xs leading-4 text-gray-400">
-                            {intl.formatMessage(
-                              messages.followingExecutionHours,
-                              {
-                                count: hoursUntil,
-                              }
-                            )}
-                          </div>
-                        );
-                      } else {
-                        return (
-                          <div className="text-xs leading-4 text-gray-400">
-                            {intl.formatMessage(
-                              messages.followingExecutionDays,
-                              {
-                                count: daysUntil,
-                              }
-                            )}
-                          </div>
-                        );
-                      }
+                      return (
+                        <div className="text-sm leading-5 text-white">
+                          {hoursUntilNext < 1 ? (
+                            <FormattedRelativeTime
+                              value={Math.floor(minutesUntilNext)}
+                              updateIntervalInSeconds={10}
+                              numeric="auto"
+                              unit="minute"
+                            />
+                          ) : hoursUntilNext <= 48 ? (
+                            <FormattedRelativeTime
+                              value={Math.floor(hoursUntilNext)}
+                              updateIntervalInSeconds={60}
+                              numeric="auto"
+                              unit="hour"
+                            />
+                          ) : (
+                            <FormattedRelativeTime
+                              value={Math.floor(secondsUntilNext / 86400)}
+                              updateIntervalInSeconds={3600}
+                              numeric="auto"
+                              unit="day"
+                            />
+                          )}
+                        </div>
+                      );
                     })()}
-                </Table.TD>
-                <Table.TD alignText="right">
-                  {job.interval !== 'fixed' && (
-                    <Button
-                      className="mr-2"
-                      buttonType="warning"
-                      onClick={() => dispatch({ type: 'open', job })}
-                    >
-                      <PencilIcon />
-                      <span>{intl.formatMessage(globalMessages.edit)}</span>
-                    </Button>
-                  )}
-                  {job.running ? (
-                    <Button buttonType="danger" onClick={() => cancelJob(job)}>
-                      <StopIcon />
-                      <span>{intl.formatMessage(messages.canceljob)}</span>
-                    </Button>
-                  ) : (
-                    <Button buttonType="primary" onClick={() => runJob(job)}>
-                      <PlayIcon />
-                      <span>{intl.formatMessage(messages.runnow)}</span>
-                    </Button>
-                  )}
-                </Table.TD>
-              </tr>
-            ))}
+                    {job.followingExecutionTime &&
+                      (() => {
+                        const secondsUntil = Math.floor(
+                          (new Date(job.followingExecutionTime).getTime() -
+                            Date.now()) /
+                            1000
+                        );
+                        const minutesUntil = Math.floor(secondsUntil / 60);
+                        const hoursUntil = Math.floor(secondsUntil / 3600);
+                        const daysUntil = Math.floor(secondsUntil / 86400);
+
+                        // Show minutes for less than 1 hour, hours for up to 48 hours, then switch to days
+                        if (hoursUntil < 1) {
+                          return (
+                            <div className="text-xs leading-4 text-gray-400">
+                              {intl.formatMessage(
+                                messages.followingExecutionMinutes,
+                                {
+                                  count: minutesUntil,
+                                }
+                              )}
+                            </div>
+                          );
+                        } else if (hoursUntil <= 48) {
+                          return (
+                            <div className="text-xs leading-4 text-gray-400">
+                              {intl.formatMessage(
+                                messages.followingExecutionHours,
+                                {
+                                  count: hoursUntil,
+                                }
+                              )}
+                            </div>
+                          );
+                        } else {
+                          return (
+                            <div className="text-xs leading-4 text-gray-400">
+                              {intl.formatMessage(
+                                messages.followingExecutionDays,
+                                {
+                                  count: daysUntil,
+                                }
+                              )}
+                            </div>
+                          );
+                        }
+                      })()}
+                  </Table.TD>
+                  <Table.TD alignText="right">
+                    {job.interval !== 'fixed' && (
+                      <Button
+                        className="mr-2"
+                        buttonType="warning"
+                        onClick={() => dispatch({ type: 'open', job })}
+                      >
+                        <PencilIcon />
+                        <span>{intl.formatMessage(globalMessages.edit)}</span>
+                      </Button>
+                    )}
+                    {job.running ? (
+                      <Button
+                        buttonType="danger"
+                        onClick={() => cancelJob(job)}
+                      >
+                        <StopIcon />
+                        <span>{intl.formatMessage(messages.canceljob)}</span>
+                      </Button>
+                    ) : (
+                      <Button buttonType="primary" onClick={() => runJob(job)}>
+                        <PlayIcon />
+                        <span>{intl.formatMessage(messages.runnow)}</span>
+                      </Button>
+                    )}
+                  </Table.TD>
+                </tr>
+              ))}
           </Table.TBody>
         </Table>
       </div>

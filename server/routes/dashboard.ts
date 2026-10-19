@@ -1,10 +1,27 @@
+import type JellyfinAPI from '@server/api/jellyfin';
 import TautulliAPI from '@server/api/tautulli';
+import { getMediaServerClient, isJellyfinMode } from '@server/lib/mediaServer';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
 import { Router } from 'express';
 
 const dashboardRoutes = Router();
+
+const getCollectionKeys = (): string[] =>
+  [
+    ...(getSettings().plex.collectionConfigs ?? []),
+    ...(getSettings().plex.preExistingCollectionConfigs ?? []),
+  ]
+    .map((config) => config.collectionRatingKey)
+    .filter((key): key is string => !!key);
+
+// On Jellyfin, play statistics come from the Playback Reporting plugin
+const getJellyfinStats = async (days: number) =>
+  ((await getMediaServerClient()) as unknown as JellyfinAPI).getDashboardStats(
+    getCollectionKeys(),
+    days
+  );
 
 /**
  * GET /api/v1/dashboard/stats
@@ -19,7 +36,35 @@ dashboardRoutes.get('/stats', isAuthenticated(), async (req, res) => {
     let weeklyStats = null;
 
     // Get Tautulli stats if configured
-    if (settings.tautulli.hostname && settings.tautulli.apiKey) {
+    if (isJellyfinMode()) {
+      try {
+        const stats = await getJellyfinStats(7);
+        const collectionPlays = stats.collections.reduce(
+          (total, collection) => total + collection.total_plays,
+          0
+        );
+        collectionStatsData = {
+          topCollections: [...stats.collections]
+            .sort((a, b) => b.total_plays - a.total_plays)
+            .slice(0, 5),
+          totalCollections: stats.collections.length,
+          collectionPlays: { total: collectionPlays, movies: 0, tv: 0 },
+        };
+        weeklyStats = {
+          totalPlays: stats.moviePlays + stats.tvPlays,
+          moviePlays: stats.moviePlays,
+          tvPlays: stats.tvPlays,
+          collectionPlays,
+        };
+        tautulliStats = { isConnected: true, weeklyActivity: weeklyStats };
+      } catch (error) {
+        // Without the plugin the dashboard shows its setup message
+        logger.debug('Jellyfin playback statistics unavailable', {
+          label: 'Dashboard API',
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    } else if (settings.tautulli.hostname && settings.tautulli.apiKey) {
       try {
         const tautulli = new TautulliAPI(settings.tautulli);
 
@@ -179,6 +224,30 @@ dashboardRoutes.get('/collections', isAuthenticated(), async (req, res) => {
   try {
     const settings = getSettings();
     const { limit = 10, statType = 'plays', days = 30 } = req.query;
+
+    if (isJellyfinMode()) {
+      let stats;
+      try {
+        stats = await getJellyfinStats(Number(days));
+      } catch (error) {
+        return res.status(400).json({
+          error: 'Playback Reporting not installed',
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+      const key = statType === 'duration' ? 'total_duration' : 'total_plays';
+      return res.status(200).json({
+        collections: stats.collections
+          .sort((a, b) => b[key] - a[key])
+          .slice(0, Number(limit)),
+        metadata: {
+          limit: Number(limit),
+          statType,
+          days: Number(days),
+          timestamp: new Date().toISOString(),
+        },
+      });
+    }
 
     if (!settings.tautulli.hostname || !settings.tautulli.apiKey) {
       return res.status(400).json({

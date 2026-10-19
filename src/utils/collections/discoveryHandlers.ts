@@ -7,6 +7,7 @@ import axios from 'axios';
 import type { AddToast } from 'react-toast-notifications';
 
 interface DiscoverPlexHubsParams {
+  serverName: string;
   localCollectionConfigs: CollectionFormConfig[];
   localHubConfigs: PlexHubConfig[];
   localPreExistingConfigs: PreExistingCollectionConfig[];
@@ -20,6 +21,7 @@ interface DiscoverPlexHubsParams {
 
 export const discoverPlexHubs = async (params: DiscoverPlexHubsParams) => {
   const {
+    serverName,
     localCollectionConfigs,
     localHubConfigs,
     localPreExistingConfigs,
@@ -111,7 +113,7 @@ export const discoverPlexHubs = async (params: DiscoverPlexHubsParams) => {
         const existingPreExisting =
           validationResults?.preExistingValidated || 0;
         addToast(
-          `All ${totalExistingConfigs} Plex ${
+          `All ${totalExistingConfigs} ${serverName} ${
             totalExistingConfigs === 1
               ? 'hub/collection has'
               : 'hubs/collections have'
@@ -127,7 +129,7 @@ export const discoverPlexHubs = async (params: DiscoverPlexHubsParams) => {
         );
       } else {
         // No existing configs and nothing discovered - truly nothing found
-        addToast('No Plex hubs found to import.', {
+        addToast(`No ${serverName} collections found to import.`, {
           autoDismiss: true,
           appearance: 'info',
         });

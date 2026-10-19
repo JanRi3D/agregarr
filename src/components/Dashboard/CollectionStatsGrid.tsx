@@ -1,5 +1,6 @@
 import Button from '@app/components/Common/Button';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
+import useMediaServer from '@app/hooks/useMediaServer';
 import {
   ChartBarIcon,
   CogIcon,
@@ -20,6 +21,9 @@ const messages = defineMessages({
   tautulliDescriptionCollections:
     'Configure Tautulli in your settings to view detailed statistics about your collections, including play counts, watch time, and viewer activity.',
   configureTautulli: 'Configure Tautulli',
+  playbackReportingRequired: 'Playback Reporting Required',
+  playbackReportingDescriptionCollections:
+    'Install the Playback Reporting plugin in Jellyfin (Dashboard → Plugins → Catalog) to view play counts, watch time and viewers for your collections.',
   plays: 'plays',
   hours: 'hours',
   items: 'items',
@@ -70,6 +74,7 @@ interface CollectionStatsResponse {
 
 const CollectionStatsGrid: React.FC = () => {
   const intl = useIntl();
+  const { isJellyfin } = useMediaServer();
   const [statType, setStatType] = useState<'plays' | 'duration'>('plays');
   const [days, setDays] = useState(30);
   const [limit] = useState(8); // Increased limit for more compact view
@@ -90,10 +95,8 @@ const CollectionStatsGrid: React.FC = () => {
   };
 
   if (error) {
-    // Check if it's a Tautulli configuration error
-    const isTautulliError =
-      error.message.includes('Tautulli not configured') ||
-      error.message.includes('Tautulli settings');
+    // 400 means no statistics source: Tautulli (Plex) or Playback Reporting (Jellyfin)
+    const isTautulliError = error.response?.status === 400;
 
     if (isTautulliError) {
       return (
@@ -108,17 +111,27 @@ const CollectionStatsGrid: React.FC = () => {
             <div className="flex flex-col items-center py-8 text-center">
               <ExclamationCircleIcon className="mb-4 h-12 w-12 text-orange-400" />
               <h4 className="mb-2 text-lg font-semibold text-white">
-                {intl.formatMessage(messages.tautulliRequired)}
+                {intl.formatMessage(
+                  isJellyfin
+                    ? messages.playbackReportingRequired
+                    : messages.tautulliRequired
+                )}
               </h4>
               <p className="mb-6 max-w-md text-gray-400">
-                {intl.formatMessage(messages.tautulliDescriptionCollections)}
+                {intl.formatMessage(
+                  isJellyfin
+                    ? messages.playbackReportingDescriptionCollections
+                    : messages.tautulliDescriptionCollections
+                )}
               </p>
-              <Link href="/settings/sources" passHref>
-                <Button as="a" buttonType="primary">
-                  <CogIcon className="mr-2 h-5 w-5" />
-                  {intl.formatMessage(messages.configureTautulli)}
-                </Button>
-              </Link>
+              {!isJellyfin && (
+                <Link href="/settings/sources" passHref>
+                  <Button as="a" buttonType="primary">
+                    <CogIcon className="mr-2 h-5 w-5" />
+                    {intl.formatMessage(messages.configureTautulli)}
+                  </Button>
+                </Link>
+              )}
             </div>
           </div>
         </div>

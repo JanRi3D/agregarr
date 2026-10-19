@@ -2,6 +2,7 @@ import Alert from '@app/components/Common/Alert';
 import Badge from '@app/components/Common/Badge';
 import Button from '@app/components/Common/Button';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
+import useMediaServer from '@app/hooks/useMediaServer';
 import { CheckIcon } from '@heroicons/react/24/solid';
 import type {
   OverseerrSettings,
@@ -22,9 +23,9 @@ interface OptionType {
 }
 
 const messages = defineMessages({
-  watchlistsync: 'Plex Watchlist Sync',
+  watchlistsync: '{server} Watchlist Sync',
   watchlistsyncDescription:
-    "Automatically sync Plex watchlists from Seerr users and add items to Radarr and Sonarr. Requires Seerr to be configured. NOTE: Seerr has this functionality built in, however it recognises placeholder files as being available, and doesn't request the item.",
+    "Automatically sync {server} watchlists from Seerr users and add items to Radarr and Sonarr. Requires Seerr to be configured. NOTE: Seerr has this functionality built in, however it recognises placeholder files as being available, and doesn't request the item.",
   overseerrNotConfigured:
     'Seerr must be configured before you can enable watchlist sync. Please configure Seerr in the settings above.',
   enableOwner: 'Enable for server owner',
@@ -60,6 +61,9 @@ const messages = defineMessages({
 
 const WatchlistSyncSettings = () => {
   const intl = useIntl();
+  // Jellyfin has no watchlists of its own; Seerr keeps them
+  const { isJellyfin } = useMediaServer();
+  const serverName = isJellyfin ? 'Seerr' : 'Plex';
   const { addToast } = useToasts();
   const { data: overseerrData } = useSWR<OverseerrSettings>(
     '/api/v1/settings/overseerr'
@@ -278,9 +282,13 @@ const WatchlistSyncSettings = () => {
 
   return (
     <div className="section">
-      <h3 className="heading">{intl.formatMessage(messages.watchlistsync)}</h3>
+      <h3 className="heading">
+        {intl.formatMessage(messages.watchlistsync, { server: serverName })}
+      </h3>
       <p className="description">
-        {intl.formatMessage(messages.watchlistsyncDescription)}
+        {intl.formatMessage(messages.watchlistsyncDescription, {
+          server: serverName,
+        })}
       </p>
 
       {!isOverseerrConfigured && (

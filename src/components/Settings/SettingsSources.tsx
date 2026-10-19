@@ -4,6 +4,7 @@ import Button from '@app/components/Common/Button';
 import Modal from '@app/components/Common/Modal';
 import PageTitle from '@app/components/Common/PageTitle';
 import SensitiveInput from '@app/components/Common/SensitiveInput';
+import useMediaServer from '@app/hooks/useMediaServer';
 import globalMessages from '@app/i18n/globalMessages';
 import { ArrowDownOnSquareIcon } from '@heroicons/react/24/outline';
 import type {
@@ -145,6 +146,7 @@ interface SettingsSourcesProps {
 
 const SettingsSources = ({ onComplete }: SettingsSourcesProps) => {
   const intl = useIntl();
+  const { isJellyfin } = useMediaServer();
   const { addToast } = useToasts();
   const router = useRouter();
   const [isTesting, setIsTesting] = useState(false);
@@ -996,304 +998,318 @@ const SettingsSources = ({ onComplete }: SettingsSourcesProps) => {
         }}
       </Formik>
 
-      {/* Tautulli Settings */}
-      <div className="section">
-        <div className="mt-10 mb-6">
-          <h3 className="heading flex items-center">
-            <img src="/services/tautulli.svg" alt="" className="mr-2 h-7 w-7" />
-            {intl.formatMessage(messages.tautulliSettings)}
-          </h3>
-          <p className="description">
-            {intl.formatMessage(messages.tautulliSettingsDescription)}
-          </p>
-        </div>
-      </div>
-      <Formik
-        initialValues={{
-          tautulliHostname: dataTautulli?.hostname,
-          tautulliPort: dataTautulli?.port ?? 8181,
-          tautulliUseSsl: dataTautulli?.useSsl ?? false,
-          tautulliUrlBase: dataTautulli?.urlBase,
-          tautulliApiKey: dataTautulli?.apiKey,
-          tautulliExternalUrl: dataTautulli?.externalUrl,
-        }}
-        validationSchema={TautulliValidationSchema}
-        enableReinitialize
-        onSubmit={async (values) => {
-          try {
-            await axios.post('/api/v1/settings/tautulli', {
-              hostname: values.tautulliHostname,
-              port: Number(values.tautulliPort),
-              apiKey: values.tautulliApiKey,
-              useSsl: values.tautulliUseSsl,
-              urlBase: values.tautulliUrlBase,
-              externalUrl: values.tautulliExternalUrl,
-            });
-            addToast(
-              intl.formatMessage(messages.toastTautulliSettingsSuccess),
-              {
-                appearance: 'success',
-                autoDismiss: true,
-              }
-            );
-          } catch (e) {
-            addToast(
-              intl.formatMessage(messages.toastTautulliSettingsFailure),
-              {
-                appearance: 'error',
-                autoDismiss: true,
-              }
-            );
-          } finally {
-            revalidateTautulli();
-          }
-        }}
-      >
-        {({
-          errors,
-          touched,
-          handleSubmit,
-          setFieldValue,
-          isSubmitting,
-          isValid,
-          values,
-        }) => {
-          const testTautulliConnection = async () => {
-            if (
-              !values.tautulliHostname ||
-              !values.tautulliPort ||
-              !values.tautulliApiKey
-            ) {
-              return;
-            }
-            setIsTesting(true);
-            setTestingService('tautulli');
-            try {
-              const response = await axios.post(
-                '/api/v1/settings/tautulli/test',
-                {
+      {/* Tautulli Settings (Plex only; Jellyfin uses Playback Reporting) */}
+      {!isJellyfin && (
+        <>
+          {/* Tautulli Settings */}
+          <div className="section">
+            <div className="mt-10 mb-6">
+              <h3 className="heading flex items-center">
+                <img
+                  src="/services/tautulli.svg"
+                  alt=""
+                  className="mr-2 h-7 w-7"
+                />
+                {intl.formatMessage(messages.tautulliSettings)}
+              </h3>
+              <p className="description">
+                {intl.formatMessage(messages.tautulliSettingsDescription)}
+              </p>
+            </div>
+          </div>
+          <Formik
+            initialValues={{
+              tautulliHostname: dataTautulli?.hostname,
+              tautulliPort: dataTautulli?.port ?? 8181,
+              tautulliUseSsl: dataTautulli?.useSsl ?? false,
+              tautulliUrlBase: dataTautulli?.urlBase,
+              tautulliApiKey: dataTautulli?.apiKey,
+              tautulliExternalUrl: dataTautulli?.externalUrl,
+            }}
+            validationSchema={TautulliValidationSchema}
+            enableReinitialize
+            onSubmit={async (values) => {
+              try {
+                await axios.post('/api/v1/settings/tautulli', {
                   hostname: values.tautulliHostname,
                   port: Number(values.tautulliPort),
                   apiKey: values.tautulliApiKey,
                   useSsl: values.tautulliUseSsl,
                   urlBase: values.tautulliUrlBase,
-                }
-              );
-              if (response.data.success) {
-                setTautulliTestSuccess(true);
-                setTestedTautulliValues(
-                  `${values.tautulliHostname}:${values.tautulliPort}:${values.tautulliApiKey}:${values.tautulliUseSsl}:${values.tautulliUrlBase}`
-                );
-
-                // Show success message for connection
+                  externalUrl: values.tautulliExternalUrl,
+                });
                 addToast(
-                  intl.formatMessage(messages.tautulliConnectionSuccess),
+                  intl.formatMessage(messages.toastTautulliSettingsSuccess),
                   {
-                    autoDismiss: true,
                     appearance: 'success',
+                    autoDismiss: true,
                   }
                 );
-              } else {
-                setTautulliTestSuccess(false);
+              } catch (e) {
                 addToast(
-                  intl.formatMessage(messages.tautulliConnectionFailure),
+                  intl.formatMessage(messages.toastTautulliSettingsFailure),
                   {
+                    appearance: 'error',
+                    autoDismiss: true,
+                  }
+                );
+              } finally {
+                revalidateTautulli();
+              }
+            }}
+          >
+            {({
+              errors,
+              touched,
+              handleSubmit,
+              setFieldValue,
+              isSubmitting,
+              isValid,
+              values,
+            }) => {
+              const testTautulliConnection = async () => {
+                if (
+                  !values.tautulliHostname ||
+                  !values.tautulliPort ||
+                  !values.tautulliApiKey
+                ) {
+                  return;
+                }
+                setIsTesting(true);
+                setTestingService('tautulli');
+                try {
+                  const response = await axios.post(
+                    '/api/v1/settings/tautulli/test',
+                    {
+                      hostname: values.tautulliHostname,
+                      port: Number(values.tautulliPort),
+                      apiKey: values.tautulliApiKey,
+                      useSsl: values.tautulliUseSsl,
+                      urlBase: values.tautulliUrlBase,
+                    }
+                  );
+                  if (response.data.success) {
+                    setTautulliTestSuccess(true);
+                    setTestedTautulliValues(
+                      `${values.tautulliHostname}:${values.tautulliPort}:${values.tautulliApiKey}:${values.tautulliUseSsl}:${values.tautulliUrlBase}`
+                    );
+
+                    // Show success message for connection
+                    addToast(
+                      intl.formatMessage(messages.tautulliConnectionSuccess),
+                      {
+                        autoDismiss: true,
+                        appearance: 'success',
+                      }
+                    );
+                  } else {
+                    setTautulliTestSuccess(false);
+                    addToast(
+                      intl.formatMessage(messages.tautulliConnectionFailure),
+                      {
+                        autoDismiss: true,
+                        appearance: 'error',
+                      }
+                    );
+                  }
+                } catch (error) {
+                  setTautulliTestSuccess(false);
+
+                  // Use server's detailed error message if available
+                  let errorMessage =
+                    error.response?.data?.message ||
+                    intl.formatMessage(messages.tautulliConnectionFailure);
+
+                  // If no server message, provide client-side diagnostics
+                  if (!error.response?.data?.message) {
+                    if (error.code === 'ECONNREFUSED') {
+                      errorMessage +=
+                        ' - Connection refused. Check hostname and port.';
+                    } else if (error.code === 'ENOTFOUND') {
+                      errorMessage += ' - Host not found. Check hostname.';
+                    } else if (error.code === 'ETIMEDOUT') {
+                      errorMessage +=
+                        ' - Connection timeout. Check network connectivity.';
+                    } else if (error.message) {
+                      errorMessage += ` - ${error.message}`;
+                    }
+                  }
+
+                  addToast(errorMessage, {
                     autoDismiss: true,
                     appearance: 'error',
-                  }
-                );
-              }
-            } catch (error) {
-              setTautulliTestSuccess(false);
-
-              // Use server's detailed error message if available
-              let errorMessage =
-                error.response?.data?.message ||
-                intl.formatMessage(messages.tautulliConnectionFailure);
-
-              // If no server message, provide client-side diagnostics
-              if (!error.response?.data?.message) {
-                if (error.code === 'ECONNREFUSED') {
-                  errorMessage +=
-                    ' - Connection refused. Check hostname and port.';
-                } else if (error.code === 'ENOTFOUND') {
-                  errorMessage += ' - Host not found. Check hostname.';
-                } else if (error.code === 'ETIMEDOUT') {
-                  errorMessage +=
-                    ' - Connection timeout. Check network connectivity.';
-                } else if (error.message) {
-                  errorMessage += ` - ${error.message}`;
+                  });
+                } finally {
+                  setTestingService(null);
+                  setIsTesting(false);
                 }
-              }
+              };
 
-              addToast(errorMessage, {
-                autoDismiss: true,
-                appearance: 'error',
-              });
-            } finally {
-              setTestingService(null);
-              setIsTesting(false);
-            }
-          };
-
-          return (
-            <form className="section" onSubmit={handleSubmit}>
-              <div className="form-row">
-                <label htmlFor="tautulliHostname" className="text-label">
-                  {intl.formatMessage(messages.tautulliHostname)}
-                  <span className="label-required">*</span>
-                </label>
-                <div className="form-input-area">
-                  <div className="form-input-field">
-                    <span className="inline-flex cursor-default items-center rounded-l-md border border-r-0 border-gray-500 bg-stone-800 px-3 text-gray-100 sm:text-sm">
-                      {values.tautulliUseSsl ? 'https://' : 'http://'}
-                    </span>
-                    <Field
-                      type="text"
-                      inputMode="url"
-                      id="tautulliHostname"
-                      name="tautulliHostname"
-                      className="rounded-r-only flex-1"
-                    />
+              return (
+                <form className="section" onSubmit={handleSubmit}>
+                  <div className="form-row">
+                    <label htmlFor="tautulliHostname" className="text-label">
+                      {intl.formatMessage(messages.tautulliHostname)}
+                      <span className="label-required">*</span>
+                    </label>
+                    <div className="form-input-area">
+                      <div className="form-input-field">
+                        <span className="inline-flex cursor-default items-center rounded-l-md border border-r-0 border-gray-500 bg-stone-800 px-3 text-gray-100 sm:text-sm">
+                          {values.tautulliUseSsl ? 'https://' : 'http://'}
+                        </span>
+                        <Field
+                          type="text"
+                          inputMode="url"
+                          id="tautulliHostname"
+                          name="tautulliHostname"
+                          className="rounded-r-only flex-1"
+                        />
+                      </div>
+                      {errors.tautulliHostname && touched.tautulliHostname && (
+                        <div className="error">{errors.tautulliHostname}</div>
+                      )}
+                    </div>
                   </div>
-                  {errors.tautulliHostname && touched.tautulliHostname && (
-                    <div className="error">{errors.tautulliHostname}</div>
-                  )}
-                </div>
-              </div>
-              <div className="form-row">
-                <label htmlFor="tautulliPort" className="text-label">
-                  {intl.formatMessage(messages.tautulliPort)}
-                  <span className="label-required">*</span>
-                </label>
-                <div className="form-input-area">
-                  <Field
-                    type="text"
-                    inputMode="numeric"
-                    id="tautulliPort"
-                    name="tautulliPort"
-                    className="short"
-                  />
-                  {errors.tautulliPort && touched.tautulliPort && (
-                    <div className="error">{errors.tautulliPort}</div>
-                  )}
-                </div>
-              </div>
-              <div className="form-row">
-                <label htmlFor="tautulliUseSsl" className="checkbox-label">
-                  {intl.formatMessage(messages.tautulliUseSsl)}
-                </label>
-                <div className="form-input-area">
-                  <Field
-                    type="checkbox"
-                    id="tautulliUseSsl"
-                    name="tautulliUseSsl"
-                    onChange={() => {
-                      setFieldValue('tautulliUseSsl', !values.tautulliUseSsl);
-                    }}
-                  />
-                </div>
-              </div>
-              <div className="form-row">
-                <label htmlFor="tautulliUrlBase" className="text-label">
-                  {intl.formatMessage(messages.urlBase)}
-                </label>
-                <div className="form-input-area">
-                  <div className="form-input-field">
-                    <Field
-                      type="text"
-                      inputMode="url"
-                      id="tautulliUrlBase"
-                      name="tautulliUrlBase"
-                      autoComplete="off"
-                      data-1pignore="true"
-                      data-lpignore="true"
-                      data-bwignore="true"
-                    />
+                  <div className="form-row">
+                    <label htmlFor="tautulliPort" className="text-label">
+                      {intl.formatMessage(messages.tautulliPort)}
+                      <span className="label-required">*</span>
+                    </label>
+                    <div className="form-input-area">
+                      <Field
+                        type="text"
+                        inputMode="numeric"
+                        id="tautulliPort"
+                        name="tautulliPort"
+                        className="short"
+                      />
+                      {errors.tautulliPort && touched.tautulliPort && (
+                        <div className="error">{errors.tautulliPort}</div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </div>
-              <div className="form-row">
-                <label htmlFor="tautulliApiKey" className="text-label">
-                  {intl.formatMessage(messages.tautulliApiKey)}
-                  <span className="label-required">*</span>
-                </label>
-                <div className="form-input-area">
-                  <div className="form-input-field">
-                    <SensitiveInput
-                      as="field"
-                      id="tautulliApiKey"
-                      name="tautulliApiKey"
-                    />
+                  <div className="form-row">
+                    <label htmlFor="tautulliUseSsl" className="checkbox-label">
+                      {intl.formatMessage(messages.tautulliUseSsl)}
+                    </label>
+                    <div className="form-input-area">
+                      <Field
+                        type="checkbox"
+                        id="tautulliUseSsl"
+                        name="tautulliUseSsl"
+                        onChange={() => {
+                          setFieldValue(
+                            'tautulliUseSsl',
+                            !values.tautulliUseSsl
+                          );
+                        }}
+                      />
+                    </div>
                   </div>
-                </div>
-              </div>
-              <div className="form-row">
-                <label htmlFor="tautulliExternalUrl" className="text-label">
-                  {intl.formatMessage(messages.externalUrl)}
-                </label>
-                <div className="form-input-area">
-                  <div className="form-input-field">
-                    <Field
-                      type="text"
-                      inputMode="url"
-                      id="tautulliExternalUrl"
-                      name="tautulliExternalUrl"
-                      autoComplete="off"
-                      data-1pignore="true"
-                      data-lpignore="true"
-                      data-bwignore="true"
-                    />
+                  <div className="form-row">
+                    <label htmlFor="tautulliUrlBase" className="text-label">
+                      {intl.formatMessage(messages.urlBase)}
+                    </label>
+                    <div className="form-input-area">
+                      <div className="form-input-field">
+                        <Field
+                          type="text"
+                          inputMode="url"
+                          id="tautulliUrlBase"
+                          name="tautulliUrlBase"
+                          autoComplete="off"
+                          data-1pignore="true"
+                          data-lpignore="true"
+                          data-bwignore="true"
+                        />
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
-              <div className="actions">
-                <div className="flex justify-end">
-                  <span className="ml-3 inline-flex rounded-md shadow-sm">
-                    <Button
-                      buttonType="default"
-                      type="button"
-                      onClick={testTautulliConnection}
-                      disabled={
-                        !values.tautulliHostname ||
-                        !values.tautulliPort ||
-                        !values.tautulliApiKey ||
-                        isTesting
-                      }
-                    >
-                      {isTesting
-                        ? intl.formatMessage(messages.testing)
-                        : intl.formatMessage(messages.testTautulliConnection)}
-                    </Button>
-                  </span>
-                  <span className="ml-3 inline-flex rounded-md shadow-sm">
-                    <Button
-                      buttonType="primary"
-                      type="submit"
-                      disabled={
-                        isSubmitting ||
-                        !isValid ||
-                        (isSetupMode &&
-                          !!values.tautulliApiKey &&
-                          (!tautulliTestSuccess ||
-                            testedTautulliValues !==
-                              `${values.tautulliHostname}:${values.tautulliPort}:${values.tautulliApiKey}:${values.tautulliUseSsl}:${values.tautulliUrlBase}`))
-                      }
-                    >
-                      <ArrowDownOnSquareIcon />
-                      <span>
-                        {isSubmitting
-                          ? intl.formatMessage(messages.saving)
-                          : intl.formatMessage(messages.save)}
+                  <div className="form-row">
+                    <label htmlFor="tautulliApiKey" className="text-label">
+                      {intl.formatMessage(messages.tautulliApiKey)}
+                      <span className="label-required">*</span>
+                    </label>
+                    <div className="form-input-area">
+                      <div className="form-input-field">
+                        <SensitiveInput
+                          as="field"
+                          id="tautulliApiKey"
+                          name="tautulliApiKey"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="form-row">
+                    <label htmlFor="tautulliExternalUrl" className="text-label">
+                      {intl.formatMessage(messages.externalUrl)}
+                    </label>
+                    <div className="form-input-area">
+                      <div className="form-input-field">
+                        <Field
+                          type="text"
+                          inputMode="url"
+                          id="tautulliExternalUrl"
+                          name="tautulliExternalUrl"
+                          autoComplete="off"
+                          data-1pignore="true"
+                          data-lpignore="true"
+                          data-bwignore="true"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="actions">
+                    <div className="flex justify-end">
+                      <span className="ml-3 inline-flex rounded-md shadow-sm">
+                        <Button
+                          buttonType="default"
+                          type="button"
+                          onClick={testTautulliConnection}
+                          disabled={
+                            !values.tautulliHostname ||
+                            !values.tautulliPort ||
+                            !values.tautulliApiKey ||
+                            isTesting
+                          }
+                        >
+                          {isTesting
+                            ? intl.formatMessage(messages.testing)
+                            : intl.formatMessage(
+                                messages.testTautulliConnection
+                              )}
+                        </Button>
                       </span>
-                    </Button>
-                  </span>
-                </div>
-              </div>
-            </form>
-          );
-        }}
-      </Formik>
+                      <span className="ml-3 inline-flex rounded-md shadow-sm">
+                        <Button
+                          buttonType="primary"
+                          type="submit"
+                          disabled={
+                            isSubmitting ||
+                            !isValid ||
+                            (isSetupMode &&
+                              !!values.tautulliApiKey &&
+                              (!tautulliTestSuccess ||
+                                testedTautulliValues !==
+                                  `${values.tautulliHostname}:${values.tautulliPort}:${values.tautulliApiKey}:${values.tautulliUseSsl}:${values.tautulliUrlBase}`))
+                          }
+                        >
+                          <ArrowDownOnSquareIcon />
+                          <span>
+                            {isSubmitting
+                              ? intl.formatMessage(messages.saving)
+                              : intl.formatMessage(messages.save)}
+                          </span>
+                        </Button>
+                      </span>
+                    </div>
+                  </div>
+                </form>
+              );
+            }}
+          </Formik>
+        </>
+      )}
 
       {/* MyAnimeList Settings */}
       <div className="section">

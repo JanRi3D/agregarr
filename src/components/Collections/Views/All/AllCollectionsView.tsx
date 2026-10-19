@@ -20,6 +20,7 @@ import ConfirmButton from '@app/components/Common/ConfirmButton';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import { useCollectionEdit } from '@app/hooks/collections/useCollectionEdit';
+import useMediaServer from '@app/hooks/useMediaServer';
 import type { CollectionFormConfig, Library } from '@app/types/collections';
 import {
   linkCollectionConfig,
@@ -46,6 +47,8 @@ const messages = defineMessages({
   allCollectionsTitle: 'All Collections',
   allCollectionsDescription:
     'Complete list of all Agregarr Collections, Default Plex Hubs, and Pre-existing Collections.',
+  allCollectionsDescriptionJellyfin:
+    'Complete list of all Agregarr Collections and Pre-existing Collections.',
   noCollections: 'No collections found.',
   agregarrCollections: 'Agregarr Collections',
   plexHubs: 'Plex Hubs',
@@ -83,6 +86,7 @@ interface DisplayCollection {
 
 const AllCollectionsView: React.FC = () => {
   const intl = useIntl();
+  const { isJellyfin } = useMediaServer();
   const { addToast } = useToasts();
 
   // Use the shared collection edit hook for collections only
@@ -313,7 +317,11 @@ const AllCollectionsView: React.FC = () => {
             {intl.formatMessage(messages.allCollectionsTitle)}
           </h3>
           <p className="description">
-            {intl.formatMessage(messages.allCollectionsDescription)}
+            {intl.formatMessage(
+              isJellyfin
+                ? messages.allCollectionsDescriptionJellyfin
+                : messages.allCollectionsDescription
+            )}
           </p>
         </div>
         <LoadingSpinner />
@@ -530,7 +538,11 @@ const AllCollectionsView: React.FC = () => {
           {intl.formatMessage(messages.allCollectionsTitle)}
         </h3>
         <p className="description">
-          {intl.formatMessage(messages.allCollectionsDescription)}
+          {intl.formatMessage(
+            isJellyfin
+              ? messages.allCollectionsDescriptionJellyfin
+              : messages.allCollectionsDescription
+          )}
         </p>
         <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">
@@ -574,9 +586,11 @@ const AllCollectionsView: React.FC = () => {
               <option value="agregarr">
                 {intl.formatMessage(messages.agregarrCollections)}
               </option>
-              <option value="hub">
-                {intl.formatMessage(messages.plexHubs)}
-              </option>
+              {!isJellyfin && (
+                <option value="hub">
+                  {intl.formatMessage(messages.plexHubs)}
+                </option>
+              )}
               <option value="preexisting">
                 {intl.formatMessage(messages.preExistingCollections)}
               </option>
@@ -797,8 +811,9 @@ const AllCollectionsView: React.FC = () => {
                     configType={collection.configType}
                   />
 
-                  {/* Visibility icons */}
-                  {getVisibilityIcons(visibilityConfig, timeRestriction)}
+                  {/* Visibility icons (Plex hubs) */}
+                  {!isJellyfin &&
+                    getVisibilityIcons(visibilityConfig, timeRestriction)}
 
                   {/* Sync Status - Three-state system */}
                   <SyncStatus

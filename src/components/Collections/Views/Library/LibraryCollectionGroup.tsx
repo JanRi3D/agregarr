@@ -16,6 +16,7 @@ import {
 import Badge from '@app/components/Common/Badge';
 import Button from '@app/components/Common/Button';
 import ConfirmButton from '@app/components/Common/ConfirmButton';
+import useMediaServer from '@app/hooks/useMediaServer';
 import type {
   CollectionFormConfig,
   FormConfigType,
@@ -168,6 +169,7 @@ const SortableItem = ({
   isSyncing,
 }: SortableItemProps) => {
   const intl = useIntl();
+  const { isJellyfin } = useMediaServer();
   const isHub = configType === 'hub';
   const isPreExisting = configType === 'preExisting';
   const isCollection = configType === 'collection';
@@ -390,8 +392,9 @@ const SortableItem = ({
         {/* Missing indicator - shown when collection no longer exists in Plex */}
         <MissingIndicator missing={config.missing} configType={configType} />
 
-        {/* Visibility icons */}
-        {getVisibilityIcons(config.visibilityConfig, config.timeRestriction)}
+        {/* Visibility icons (Plex hubs) */}
+        {!isJellyfin &&
+          getVisibilityIcons(config.visibilityConfig, config.timeRestriction)}
 
         {/* Sync Status - Three-state system */}
         <SyncStatus

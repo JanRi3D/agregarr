@@ -1190,6 +1190,87 @@ class JellyfinAPI implements PlexCompatible {
   }
 
   /**
+   * Dashboard statistics from the Playback Reporting plugin, in the shape the
+   * dashboard uses for Tautulli: play totals by type and per-collection plays.
+   * Episode plays count towards the series they belong to.
+   */
+  public async getDashboardStats(
+    collectionIds: string[],
+    days: number
+  ): Promise<{
+    moviePlays: number;
+    tvPlays: number;
+    collections: {
+      rating_key: string;
+      title: string;
+      media_type: string;
+      item_count: number;
+      total_plays: number;
+      total_duration: number;
+      user_stats: { user_id: string }[];
+    }[];
+  }> {
+    const since = new Date(Date.now() - days * 86400000)
+      .toISOString()
+      .slice(0, 10);
+    const rows = await this.queryPlaybackReporting(
+      `SELECT ItemId, ItemType, UserId, COUNT(1), SUM(PlayDuration)
+       FROM PlaybackActivity
+       WHERE DateCreated >= '${since}'
+       GROUP BY ItemId, ItemType, UserId`
+    );
+
+    const played = await this.getItemsByIds(rows.map(([itemId]) => itemId));
+    const seriesOf = new Map(played.map((item) => [item.Id, item.SeriesId]));
+
+    const collections = await Promise.all(
+      collectionIds.map(async (id) => {
+        const [meta, members] = await Promise.all([
+          this.getCollectionMetadata(id),
+          this.getCollectionItems(id),
+        ]);
+        const memberIds = new Set(members);
+        const users = new Set<string>();
+        let plays = 0;
+        let duration = 0;
+        for (const [itemId, , userId, count, seconds] of rows) {
+          const seriesId = seriesOf.get(itemId);
+          if (memberIds.has(itemId) || (seriesId && memberIds.has(seriesId))) {
+            plays += Number(count);
+            duration += Number(seconds);
+            users.add(userId);
+          }
+        }
+        return meta
+          ? {
+              rating_key: id,
+              title: meta.title,
+              media_type: 'collection',
+              item_count: members.length,
+              total_plays: plays,
+              total_duration: duration,
+              user_stats: [...users].map((user_id) => ({ user_id })),
+            }
+          : null;
+      })
+    );
+
+    const playsOfType = (type: string) =>
+      rows
+        .filter(([, itemType]) => itemType === type)
+        .reduce((total, [, , , count]) => total + Number(count), 0);
+
+    return {
+      moviePlays: playsOfType('Movie'),
+      tvPlays: playsOfType('Episode'),
+      collections: collections.filter(
+        (collection): collection is NonNullable<typeof collection> =>
+          collection !== null
+      ),
+    };
+  }
+
+  /**
    * Most watched (by plays or play time) or most popular (by number of
    * viewers) movies or shows of the last `days` days, in Tautulli's row
    * shape. Needs the Playback Reporting plugin, which logs every playback;
