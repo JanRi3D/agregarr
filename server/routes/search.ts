@@ -1,5 +1,7 @@
+import JellyfinAPI from '@server/api/jellyfin';
 import type { PlexLibraryItem } from '@server/api/plexapi';
 import PlexAPI from '@server/api/plexapi';
+import { getMediaServerClient } from '@server/lib/mediaServer';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import axios from 'axios';
@@ -17,6 +19,14 @@ searchRouter.get('/image', async (req, res) => {
 
     if (!imagePath) {
       return res.status(400).json({ error: 'Image path is required' });
+    }
+
+    const client = await getMediaServerClient();
+    if (client instanceof JellyfinAPI) {
+      const image = await client.getImage(imagePath);
+      res.setHeader('Content-Type', image.contentType);
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      return res.send(image.data);
     }
 
     // Get admin user for Plex API access
@@ -90,6 +100,31 @@ searchRouter.get('/search', async (req, res) => {
 
     if (!admin) {
       return res.status(500).json({ error: 'No admin user found' });
+    }
+
+    const client = await getMediaServerClient();
+    if (client instanceof JellyfinAPI) {
+      const results: PlexSearchResult[] = [];
+      for (const library of getSettings().plex.libraries) {
+        const items = await client.searchLibrary(library.key, query, limit);
+        results.push(
+          ...items.map((item) => ({
+            ratingKey: item.ratingKey,
+            title: item.title,
+            year: item.year,
+            type: item.type as 'movie' | 'show',
+            thumb: item.thumb
+              ? `/api/v1/plex/image?path=${encodeURIComponent(item.thumb)}`
+              : undefined,
+            libraryId: library.key,
+            libraryName: library.name,
+          }))
+        );
+      }
+      return res.status(200).json({
+        results: results.slice(0, limit),
+        totalResults: Math.min(results.length, limit),
+      });
     }
 
     const plexApi = new PlexAPI({ plexToken: admin.plexToken });
@@ -225,7 +260,7 @@ searchRouter.get('/labels', async (_req, res) => {
       return res.status(500).json({ error: 'No admin user found' });
     }
 
-    const plexApi = new PlexAPI({ plexToken: admin.plexToken });
+    const plexApi = await getMediaServerClient();
 
     // Get all libraries
     const allLibraries = await plexApi.getLibraries();

@@ -23,8 +23,10 @@ interface JellyfinItem {
   Tags?: string[];
   Overview?: string;
   ChildCount?: number;
+  RecursiveItemCount?: number;
   ParentId?: string;
   SeriesId?: string;
+  SeasonId?: string;
   IndexNumber?: number;
   ParentIndexNumber?: number;
   ImageTags?: Record<string, string>;
@@ -67,6 +69,7 @@ type PlexCompatible = Pick<
   | 'scanLibrary'
   | 'emptyTrash'
   | 'getMetadata'
+  | 'getChildrenMetadata'
   | 'getAllEpisodesFromShow'
   | 'getAllCollections'
   | 'getCollectionMetadata'
@@ -74,6 +77,7 @@ type PlexCompatible = Pick<
   | 'createEmptyCollection'
   | 'addItemsToCollection'
   | 'getCollectionItems'
+  | 'getCollectionItemsWithMetadata'
   | 'updateCollectionContents'
   | 'updateCollectionContentSort'
   | 'arrangeCollectionItemsInOrder'
@@ -84,6 +88,8 @@ type PlexCompatible = Pick<
   | 'updateCollectionVisibility'
   | 'updateSummary'
   | 'deleteCollection'
+  | 'deleteSmartCollection'
+  | 'getLibraryLabels'
   | 'deleteHubItem'
   | 'getCurrentPosterUrl'
   | 'updateCollectionPoster'
@@ -116,26 +122,49 @@ const toPlexGuids = (providerIds: Record<string, string> = {}) =>
 const toUnixSeconds = (date?: string) =>
   date ? Math.floor(new Date(date).getTime() / 1000) : 0;
 
-const toPlexItem = (item: JellyfinItem): PlexLibraryItem => ({
+const PLEX_TYPES: Record<string, PlexLibraryItem['type']> = {
+  Series: 'show',
+  Season: 'season',
+  Episode: 'episode',
+};
+
+/** Relative Jellyfin poster URL; the tag changes whenever the image does. */
+const posterPath = (item: JellyfinItem) =>
+  item.ImageTags?.Primary
+    ? `/Items/${item.Id}/Images/Primary?tag=${item.ImageTags.Primary}`
+    : undefined;
+
+const toPlexItem = (
+  item: JellyfinItem
+): PlexLibraryItem & { thumb?: string } => ({
   ratingKey: item.Id,
-  parentRatingKey: item.SeriesId,
+  parentRatingKey: item.SeasonId ?? item.SeriesId,
+  grandparentRatingKey: item.SeasonId ? item.SeriesId : undefined,
   title: item.Name,
   guid: '',
   Guid: toPlexGuids(item.ProviderIds),
+  Label: item.Tags?.map((tag) => ({ tag })),
+  thumb: posterPath(item),
   addedAt: toUnixSeconds(item.DateCreated),
   updatedAt: toUnixSeconds(item.DateCreated),
   year: item.ProductionYear,
   originallyAvailableAt: item.PremiereDate?.slice(0, 10),
   index: item.IndexNumber,
   parentIndex: item.ParentIndexNumber,
-  type:
-    item.Type === 'Series'
-      ? 'show'
-      : item.Type === 'Episode'
-      ? 'episode'
-      : 'movie',
+  type: PLEX_TYPES[item.Type] ?? 'movie',
   Media: [],
 });
+
+const toPlexMetadata = (item: JellyfinItem): PlexMetadata => {
+  const plexItem = toPlexItem(item);
+  return {
+    ...plexItem,
+    Guid: plexItem.Guid ?? [],
+    index: plexItem.index ?? 0,
+    leafCount: item.RecursiveItemCount ?? item.ChildCount ?? 0,
+    viewedLeafCount: 0,
+  };
+};
 
 const imageContentType = (file: string) =>
   ({ '.png': 'image/png', '.webp': 'image/webp' }[
@@ -260,14 +289,16 @@ class JellyfinAPI implements PlexCompatible {
   }
 
   public async getMetadata(key: string): Promise<PlexMetadata> {
-    const item = toPlexItem(await this.getItem(key));
-    return {
-      ...item,
-      Guid: item.Guid ?? [],
-      index: item.index ?? 0,
-      leafCount: 0,
-      viewedLeafCount: 0,
-    };
+    return toPlexMetadata(await this.getItem(key));
+  }
+
+  /** Seasons of a show, episodes of a season. */
+  public async getChildrenMetadata(key: string): Promise<PlexMetadata[]> {
+    const items = await this.getAllItems({
+      ParentId: key,
+      Fields: 'ProviderIds,DateCreated',
+    });
+    return items.map(toPlexMetadata);
   }
 
   public async getAllEpisodesFromShow(
@@ -342,6 +373,16 @@ class JellyfinAPI implements PlexCompatible {
   ): Promise<string[]> {
     const items = await this.getAllItems({ ParentId: collectionRatingKey });
     return items.map((item) => item.Id);
+  }
+
+  public async getCollectionItemsWithMetadata(
+    collectionRatingKey: string
+  ): Promise<PlexMetadata[]> {
+    const items = await this.getAllItems({
+      ParentId: collectionRatingKey,
+      Fields: 'ProviderIds,DateCreated',
+    });
+    return items.map(toPlexMetadata);
   }
 
   public async updateCollectionContents(
@@ -431,6 +472,56 @@ class JellyfinAPI implements PlexCompatible {
 
   public async deleteCollection(collectionRatingKey: string): Promise<void> {
     await this.axios.delete(`/Items/${collectionRatingKey}`);
+  }
+
+  // Jellyfin has no smart collections; anything passed here is a BoxSet
+  public async deleteSmartCollection(collectionRatingKey: string) {
+    await this.deleteCollection(collectionRatingKey);
+  }
+
+  /** Item tags in a library (Jellyfin's equivalent of Plex item labels). */
+  public async getLibraryLabels(libraryId: string): Promise<string[]> {
+    const { data } = await this.axios.get<{ Tags?: string[] }>(
+      '/Items/Filters',
+      { params: { ParentId: libraryId } }
+    );
+    return data.Tags ?? [];
+  }
+
+  /** Title search of one library's movies and shows. */
+  public async searchLibrary(
+    libraryId: string,
+    searchTerm: string,
+    limit: number
+  ): Promise<(PlexLibraryItem & { thumb?: string })[]> {
+    const { data } = await this.axios.get<JellyfinItemsResponse>('/Items', {
+      params: {
+        ParentId: libraryId,
+        SearchTerm: searchTerm,
+        Recursive: true,
+        IncludeItemTypes: 'Movie,Series',
+        Fields: 'ProviderIds,DateCreated',
+        Limit: limit,
+      },
+    });
+    return data.Items.map(toPlexItem);
+  }
+
+  /** Fetch an image by its server-relative path, e.g. a poster URL from getCurrentPosterUrl. */
+  public async getImage(
+    imagePath: string
+  ): Promise<{ data: Buffer; contentType: string }> {
+    // Only image endpoints, so callers can't reach other admin APIs with our key
+    if (!/^\/Items\/[\w-]+\/Images\/[\w/]+(\?[^#]*)?$/.test(imagePath)) {
+      throw new Error(`Not a Jellyfin image path: ${imagePath}`);
+    }
+    const response = await this.axios.get<ArrayBuffer>(imagePath, {
+      responseType: 'arraybuffer',
+    });
+    return {
+      data: Buffer.from(response.data),
+      contentType: String(response.headers['content-type'] ?? 'image/jpeg'),
+    };
   }
 
   public async getCurrentPosterUrl(ratingKey: string): Promise<string | null> {

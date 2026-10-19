@@ -1291,10 +1291,7 @@ router.get('/collection-posters/:id', async (req, res, next) => {
     }
 
     // Dynamic imports to avoid circular dependencies
-    const PlexAPI = (await import('@server/api/plexapi')).default;
     const TheMovieDb = (await import('@server/api/themoviedb')).default;
-    const { getRepository } = await import('@server/datasource');
-    const { User } = await import('@server/entity/User');
     const { getSettings, getTmdbLanguage } = await import(
       '@server/lib/settings'
     );
@@ -1302,20 +1299,8 @@ router.get('/collection-posters/:id', async (req, res, next) => {
       '@server/lib/collections/services/PreExistingCollectionConfigService'
     );
 
-    // Get Plex client
-    const userRepository = getRepository(User);
-    const admin = await userRepository.findOne({
-      select: { id: true, plexToken: true },
-      where: { id: 1 },
-    });
-
-    if (!admin || !admin.plexToken) {
-      return res.status(400).json({
-        error: 'Plex authentication not configured',
-      });
-    }
-
-    const plexClient = new PlexAPI({ plexToken: admin.plexToken });
+    const { getMediaServerClient } = await import('@server/lib/mediaServer');
+    const plexClient = await getMediaServerClient();
     let collectionRatingKey: string | undefined;
     let libraryId: string | undefined;
 

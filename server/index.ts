@@ -1,8 +1,7 @@
-import PlexAPI from '@server/api/plexapi';
 import dataSource, { getRepository } from '@server/datasource';
 import { Session } from '@server/entity/Session';
-import { User } from '@server/entity/User';
 import { startJobs } from '@server/job/schedule';
+import { getMediaServerClient } from '@server/lib/mediaServer';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import routes from '@server/routes';
@@ -197,20 +196,10 @@ app
       settings.plex.libraries.length > 1 &&
       !settings.plex.libraries[0].type
     ) {
-      const userRepository = getRepository(User);
-      const admin = await userRepository.findOne({
-        select: { id: true, plexToken: true },
-        where: { id: 1 },
+      logger.info('Migrating libraries to include media type', {
+        label: 'Settings',
       });
-
-      if (admin) {
-        logger.info('Migrating Plex libraries to include media type', {
-          label: 'Settings',
-        });
-
-        const plexapi = new PlexAPI({ plexToken: admin.plexToken });
-        await plexapi.syncLibraries();
-      }
+      await (await getMediaServerClient()).syncLibraries();
     }
 
     // Start Jobs

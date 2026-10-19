@@ -1,6 +1,4 @@
 import PlexAPI from '@server/api/plexapi';
-import { getRepository } from '@server/datasource';
-import { User } from '@server/entity/User';
 import type { PlexCollection } from '@server/lib/collections/core/types';
 import { libraryCacheService } from '@server/lib/collections/services/LibraryCacheService';
 import { PreExistingCollectionConfigService } from '@server/lib/collections/services/PreExistingCollectionConfigService';
@@ -2074,31 +2072,7 @@ collectionsRoutes.post(
 // GET /api/v1/collections/preexisting - Get pre-existing Plex collections (non-Overseerr)
 collectionsRoutes.get('/preexisting', isAuthenticated(), async (_req, res) => {
   try {
-    const settings = getSettings().load();
-
-    if (!settings.plex.ip || !settings.plex.port) {
-      return res.status(400).json({
-        error: 'Plex server not configured',
-      });
-    }
-
-    // Get admin user for Plex token
-    const userRepository = getRepository(User);
-    const adminUser = await userRepository.findOne({
-      where: { id: 1 },
-      select: ['id', 'plexToken'],
-    });
-
-    if (!adminUser?.plexToken) {
-      return res.status(400).json({
-        error: 'No Plex token found for admin user',
-      });
-    }
-
-    const plexClient = new PlexAPI({
-      plexToken: adminUser.plexToken,
-      plexSettings: settings.plex,
-    });
+    const plexClient = await getMediaServerClient();
 
     // Test connection
     const statusResult = await plexClient.getStatus();

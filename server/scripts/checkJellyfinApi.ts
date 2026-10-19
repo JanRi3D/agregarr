@@ -35,6 +35,19 @@ const routes: Partial<Record<string, (call: Call) => unknown>> = {
     { Name: 'Music', ItemId: 'lib-music', CollectionType: 'music' },
   ],
   'GET /Items': ({ query }) => {
+    if (query.get('SearchTerm') === 'matrix') {
+      return {
+        Items: [
+          {
+            Id: 'jf-matrix',
+            Name: 'The Matrix',
+            Type: 'Movie',
+            ImageTags: { Primary: 'p1' },
+          },
+        ],
+        TotalRecordCount: 1,
+      };
+    }
     if (query.get('ParentId') === 'col-1') {
       return {
         Items: [...collectionItems].map((Id) => ({ Id, Name: Id })),
@@ -57,8 +70,25 @@ const routes: Partial<Record<string, (call: Call) => unknown>> = {
         TotalRecordCount: 1,
       };
     }
+    if (query.get('ParentId') === 'show-1') {
+      return {
+        Items: [
+          {
+            Id: 'season-1',
+            Name: 'Season 1',
+            Type: 'Season',
+            IndexNumber: 1,
+            SeriesId: 'show-1',
+          },
+        ],
+        TotalRecordCount: 1,
+      };
+    }
     return { Items: [], TotalRecordCount: 0 };
   },
+  'GET /Items/Filters': () => ({ Tags: ['Overlay'] }),
+  'GET /Items/jf-matrix/Images/Primary': () => 'image-bytes',
+  'DELETE /Items/col-2': () => '',
   'GET /Items/col-1': () => ({
     Id: 'col-1',
     Name: 'Old Name',
@@ -194,6 +224,41 @@ const main = async () => {
       '/Items/col-1/Images/Primary?tag=abc',
       '/Items/col-1/Images/Primary?tag=def'
     )
+  );
+
+  // Collection items and show children come back Plex-shaped
+  const collectionMetadata = await jellyfin.getCollectionItemsWithMetadata(
+    'col-1'
+  );
+  assert.deepStrictEqual(
+    collectionMetadata.map((item) => item.ratingKey).sort(),
+    ['b', 'c']
+  );
+  const [season] = await jellyfin.getChildrenMetadata('show-1');
+  assert.deepStrictEqual(
+    { type: season.type, index: season.index, parent: season.parentRatingKey },
+    { type: 'season', index: 1, parent: 'show-1' }
+  );
+
+  // Smart collection deletes are plain BoxSet deletes
+  await jellyfin.deleteSmartCollection('col-2');
+  assert.strictEqual(calls[calls.length - 1].method, 'DELETE');
+
+  // Item labels are Jellyfin tags
+  assert.deepStrictEqual(await jellyfin.getLibraryLabels('lib-movies'), [
+    'Overlay',
+  ]);
+
+  // Search returns library items with a proxiable poster path
+  const [hit] = await jellyfin.searchLibrary('lib-movies', 'matrix', 5);
+  assert.strictEqual(hit.thumb, '/Items/jf-matrix/Images/Primary?tag=p1');
+
+  // Images are fetched only from image endpoints
+  const image = await jellyfin.getImage(hit.thumb ?? '');
+  assert.ok(image.data.length > 0);
+  await assert.rejects(
+    jellyfin.getImage('/Items/x/Images/../../System/Configuration'),
+    /Not a Jellyfin image path/
   );
 
   // Missing collections resolve to null instead of throwing
